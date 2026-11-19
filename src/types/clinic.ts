@@ -102,13 +102,58 @@ export interface Appointment {
   doctorId: string;
   doctorName: string;
   date: string;
+  /** Exact time like "10:00" OR attendance window label like "شیفت صبح (۰۹:۰۰ تا ۱۳:۰۰)" when exact time slots are disabled */
   time: string;
+  /** Optional attendance shift label when booked without exact hour */
+  shiftLabel?: string;
   durationMinutes: number;
   service: string;
   status: AppointmentStatus;
   source: 'clinic' | 'online';
   notes?: string;
   reminderSent?: boolean;
+}
+
+export interface AttendanceWindow {
+  id: string;
+  label: string;
+  start: string;
+  end: string;
+}
+
+/** 0 = شنبه (Saturday), 1 = یکشنبه, ..., 6 = جمعه (Friday) */
+export type PersianWeekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+
+export interface DayScheduleRule {
+  weekday: PersianWeekday;
+  enabled: boolean;
+  dailyCapacity: number;
+  windows: AttendanceWindow[];
+  /** Custom manually added hours e.g. ["13:15"] */
+  manualAddedSlots: string[];
+  /** Specific generated hours manually removed/blocked e.g. ["10:30"] */
+  removedSlots: string[];
+}
+
+export interface DateOverrideRule {
+  date: string; // YYYY-MM-DD
+  closed: boolean;
+  dailyCapacity?: number;
+  customWindows?: AttendanceWindow[];
+  manualAddedSlots?: string[];
+  removedSlots?: string[];
+  note?: string;
+}
+
+export interface DoctorBookingConfig {
+  doctorId: string;
+  /** If false, exact clock times are hidden and patients reserve by day + attendance window up to dailyCapacity */
+  enableExactTimeSlots: boolean;
+  slotDurationMinutes: number;
+  defaultDailyCapacity: number;
+  bookingHorizonDays: number;
+  weekSchedule: Record<PersianWeekday, DayScheduleRule>;
+  dateOverrides: DateOverrideRule[];
 }
 
 export interface InvoiceItem {
@@ -143,6 +188,44 @@ export interface Invoice {
   accountingVoucherCode?: string;
   accountingSoftware?: string;
   notes?: string;
+}
+
+export type ExpenseCategory =
+  | 'مواد مصرفی دندانپزشکی'
+  | 'لابراتوار و پروتز'
+  | 'تجهیزات و تعمیرات'
+  | 'اجاره و قبوض'
+  | 'حقوق و دستمزد'
+  | 'پذیرایی و ملزومات اداری'
+  | 'سایر هزینه‌ها';
+
+export type ExpenseSource = 'clinic_purchase' | 'petty_cash';
+export type ExpensePaymentStatus = 'paid' | 'unpaid';
+
+export interface ClinicExpense {
+  id: string;
+  date: string;
+  title: string;
+  category: ExpenseCategory;
+  vendor: string;
+  amount: number;
+  source: ExpenseSource;
+  paymentMethod: 'کارت بانکی مطب' | 'انتقال حساب' | 'تنخواه نقدی' | 'چک';
+  receiptNumber?: string;
+  status: ExpensePaymentStatus;
+  recordedBy: string;
+  accountingSync: AccountingSyncStatus;
+  accountingVoucherCode?: string;
+  notes?: string;
+}
+
+export interface PettyCashTopUp {
+  id: string;
+  date: string;
+  amount: number;
+  custodian: string;
+  description: string;
+  referenceCode?: string;
 }
 
 export interface SmsLog {
@@ -189,6 +272,9 @@ export interface ClinicState {
   patients: Patient[];
   appointments: Appointment[];
   invoices: Invoice[];
+  expenses: ClinicExpense[];
+  pettyCashTopUps: PettyCashTopUp[];
+  bookingConfigs: Record<string, DoctorBookingConfig>;
   smsLogs: SmsLog[];
   consultations: ConsultationThread[];
 }
@@ -196,9 +282,19 @@ export interface ClinicState {
 export type AppView =
   | 'dashboard'
   | 'appointments'
+  | 'booking_settings'
   | 'patients'
   | 'billing'
   | 'consultations'
   | 'reports'
-  | 'staff'
-  | 'portal';
+  | 'staff';
+
+export type AppSection = 'clinic' | 'patient_portal';
+
+export type ReportPeriodType =
+  | 'daily'
+  | 'weekly'
+  | 'monthly'
+  | 'quarterly'
+  | 'yearly'
+  | 'custom';

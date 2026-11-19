@@ -2,7 +2,23 @@ import { useCallback, useEffect, useState } from 'react';
 import { createSeedClinicState } from '../data/seedData';
 import type { ClinicState } from '../types/clinic';
 
-const STORAGE_KEY = 'dentaplus_clinic_state_v1';
+const STORAGE_KEY = 'dentaplus_clinic_state_v2';
+
+function hydrateClinicState(raw: Partial<ClinicState>): ClinicState {
+  const seed = createSeedClinicState();
+  return {
+    ...seed,
+    ...raw,
+    expenses: Array.isArray(raw.expenses) ? raw.expenses : seed.expenses,
+    pettyCashTopUps: Array.isArray(raw.pettyCashTopUps)
+      ? raw.pettyCashTopUps
+      : seed.pettyCashTopUps,
+    bookingConfigs:
+      raw.bookingConfigs && Object.keys(raw.bookingConfigs).length > 0
+        ? raw.bookingConfigs
+        : seed.bookingConfigs,
+  };
+}
 
 export function useClinicStore() {
   const [state, setState] = useState<ClinicState>(() => createSeedClinicState());
@@ -13,13 +29,14 @@ export function useClinicStore() {
     fetch('/api/clinic')
       .then((res) => {
         if (!res.ok) throw new Error('Failed to fetch clinic state');
-        return res.json() as Promise<ClinicState>;
+        return res.json() as Promise<Partial<ClinicState>>;
       })
       .then((data) => {
         if (active && data && Array.isArray(data.patients)) {
-          setState(data);
+          const hydrated = hydrateClinicState(data);
+          setState(hydrated);
           try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(hydrated));
           } catch {
             // ignore storage quota errors
           }
@@ -29,7 +46,7 @@ export function useClinicStore() {
         try {
           const cached = localStorage.getItem(STORAGE_KEY);
           if (cached && active) {
-            setState(JSON.parse(cached) as ClinicState);
+            setState(hydrateClinicState(JSON.parse(cached) as Partial<ClinicState>));
           }
         } catch {
           // keep seed state

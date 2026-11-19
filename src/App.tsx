@@ -1,6 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import {
   BarChart3,
+  Building2,
+  CalendarCog,
   CalendarDays,
   CreditCard,
   Globe,
@@ -14,6 +16,7 @@ import {
 } from 'lucide-react';
 import { AppointmentsSmsView } from './components/AppointmentsSmsView';
 import { BillingAccountingView } from './components/BillingAccountingView';
+import { BookingSettingsView } from './components/BookingSettingsView';
 import { ConsultationsView } from './components/ConsultationsView';
 import { DashboardView } from './components/DashboardView';
 import { PatientPortalView } from './components/PatientPortalView';
@@ -24,11 +27,15 @@ import { useClinicStore } from './hooks/useClinicStore';
 import type {
   Appointment,
   AppointmentStatus,
+  AppSection,
   AppView,
+  ClinicExpense,
   ConsultationThread,
+  DoctorBookingConfig,
   Invoice,
   Patient,
   PermissionKey,
+  PettyCashTopUp,
   RadiologyDocument,
   RoleType,
   StaffMember,
@@ -36,6 +43,7 @@ import type {
 } from './types/clinic';
 import {
   calculateInvoiceTotals,
+  createDefaultBookingConfig,
   generateNextPatientCode,
   hasPermission,
   renderSmsTemplate,
@@ -50,7 +58,7 @@ interface NavItem {
   requiredPerm?: PermissionKey;
 }
 
-const NAV_ITEMS: NavItem[] = [
+const CLINIC_NAV_ITEMS: NavItem[] = [
   { id: 'dashboard', label: 'داشبورد مطب', icon: LayoutDashboard },
   {
     id: 'appointments',
@@ -58,10 +66,16 @@ const NAV_ITEMS: NavItem[] = [
     icon: CalendarDays,
     requiredPerm: 'manage_appointments',
   },
+  {
+    id: 'booking_settings',
+    label: 'تنظیمات نوبت‌گیری',
+    icon: CalendarCog,
+    requiredPerm: 'manage_appointments',
+  },
   { id: 'patients', label: 'پرونده الکترونیک بیماران', icon: Users },
   {
     id: 'billing',
-    label: 'حسابداری و فاکتور آنلاین',
+    label: 'مالی، خرید و تنخواه',
     icon: CreditCard,
     requiredPerm: 'manage_billing',
   },
@@ -73,7 +87,7 @@ const NAV_ITEMS: NavItem[] = [
   },
   {
     id: 'reports',
-    label: 'گزارش‌های ماهانه',
+    label: 'گزارش‌های حرفه‌ای حسابداری',
     icon: BarChart3,
     requiredPerm: 'view_reports',
   },
@@ -83,14 +97,14 @@ const NAV_ITEMS: NavItem[] = [
     icon: ShieldCheck,
     requiredPerm: 'manage_staff',
   },
-  { id: 'portal', label: 'پورتال آنلاین بیمار', icon: Globe },
 ];
 
 export default function App() {
   const { state, updateState } = useClinicStore();
 
+  const [appSection, setAppSection] = useState<AppSection>('clinic');
   const [activeView, setActiveView] = useState<AppView>('dashboard');
-  const [activeActorId, setActiveActorId] = useState<string>('st-doc-1');
+  const [activeStaffId, setActiveStaffId] = useState<string>('st-doc-1');
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(
     state.patients[0]?.id ?? null
   );
@@ -98,28 +112,21 @@ export default function App() {
   const [globalQuery, setGlobalQuery] = useState('');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const isPatientPortalActor = activeActorId === 'patient-portal';
-  const currentStaff: StaffMember | null = isPatientPortalActor
-    ? null
-    : state.staff.find((s) => s.id === activeActorId) ?? state.staff[0] ?? null;
-  const currentRole: RoleType = isPatientPortalActor
-    ? 'patient'
-    : currentStaff?.role ?? 'dentist';
+  const currentStaff: StaffMember | null =
+    state.staff.find((s) => s.id === activeStaffId) ?? state.staff[0] ?? null;
+  const currentRole: RoleType =
+    appSection === 'patient_portal' ? 'patient' : currentStaff?.role ?? 'dentist';
 
   const can = (perm: PermissionKey) => hasPermission(currentStaff, currentRole, perm);
 
   const visibleNavItems = useMemo(() => {
-    if (currentRole === 'patient') {
-      return NAV_ITEMS.filter((n) => n.id === 'portal');
-    }
-    return NAV_ITEMS.filter((n) => !n.requiredPerm || can(n.requiredPerm));
+    return CLINIC_NAV_ITEMS.filter((n) => !n.requiredPerm || can(n.requiredPerm));
   }, [currentRole, currentStaff]);
 
   const effectiveView: AppView = useMemo(() => {
-    if (currentRole === 'patient') return 'portal';
     const allowed = visibleNavItems.some((item) => item.id === activeView);
     return allowed ? activeView : 'dashboard';
-  }, [currentRole, visibleNavItems, activeView]);
+  }, [visibleNavItems, activeView]);
 
   const globalResults = useMemo(() => {
     if (!globalQuery.trim()) return [];
@@ -127,7 +134,7 @@ export default function App() {
   }, [state.patients, globalQuery]);
 
   const activeNavTitle =
-    NAV_ITEMS.find((n) => n.id === effectiveView)?.label ?? 'داشبورد مطب';
+    CLINIC_NAV_ITEMS.find((n) => n.id === effectiveView)?.label ?? 'داشبورد مطب';
 
   // Mutations
   const handleCreateAppointment = (apt: Omit<Appointment, 'id'>) => {
@@ -182,6 +189,34 @@ export default function App() {
     });
   };
 
+  const handleSaveBookingConfig = (doctorId: string, config: DoctorBookingConfig) => {
+    updateState((prev) => ({
+      ...prev,
+      bookingConfigs: {
+        ...prev.bookingConfigs,
+        [doctorId]: config,
+      },
+    }));
+  };
+
+  const handleApplyBookingConfigToAll = (sourceConfig: DoctorBookingConfig) => {
+    updateState((prev) => {
+      const nextConfigs: Record<string, DoctorBookingConfig> = { ...prev.bookingConfigs };
+      for (const s of prev.staff) {
+        if (s.isDoctor && s.active) {
+          nextConfigs[s.id] = {
+            ...sourceConfig,
+            doctorId: s.id,
+          };
+        }
+      }
+      return {
+        ...prev,
+        bookingConfigs: nextConfigs,
+      };
+    });
+  };
+
   const handleCreatePatient = (patientData: Omit<Patient, 'id'>): Patient => {
     const newPatient: Patient = { ...patientData, id: `pat-${Date.now()}` };
     updateState((prev) => ({
@@ -209,7 +244,7 @@ export default function App() {
               toothNumber,
               condition,
               notes,
-              updatedAt: '2026-11-13',
+              updatedAt: '2026-11-19',
             },
           },
         };
@@ -242,13 +277,13 @@ export default function App() {
                 toothNumber: data.toothNumber,
                 condition: data.newCondition,
                 notes: data.notes || p.teethChart[data.toothNumber]?.notes,
-                updatedAt: '2026-11-13',
+                updatedAt: '2026-11-19',
               },
             },
             clinicalHistory: [
               {
                 id: `rec-${Date.now()}`,
-                date: '2026-11-13',
+                date: '2026-11-19',
                 doctorId: data.doctorId,
                 doctorName: doc?.name ?? 'پزشک کلینیک',
                 procedure: data.procedure,
@@ -308,9 +343,10 @@ export default function App() {
           status: t.status,
           paymentRef,
           paymentMethod: 'درگاه پرداخت مستقیم',
-          paidAt: '2026-11-13',
+          paidAt: '2026-11-19',
           accountingSync: 'synced',
-          accountingVoucherCode: inv.accountingVoucherCode || `ACC-405-${1400 + prev.invoices.length}`,
+          accountingVoucherCode:
+            inv.accountingVoucherCode || `ACC-405-${1400 + prev.invoices.length}`,
           accountingSoftware: prev.accountingSoftwareName,
         };
       }),
@@ -333,6 +369,42 @@ export default function App() {
     }));
   };
 
+  const handleAddExpense = (expenseData: Omit<ClinicExpense, 'id'>) => {
+    updateState((prev) => ({
+      ...prev,
+      expenses: [{ ...expenseData, id: `exp-${Date.now()}` }, ...prev.expenses],
+    }));
+  };
+
+  const handleSyncExpenseAccounting = (expenseId: string) => {
+    updateState((prev) => ({
+      ...prev,
+      expenses: prev.expenses.map((exp, idx) =>
+        exp.id === expenseId
+          ? {
+              ...exp,
+              accountingSync: 'synced',
+              accountingVoucherCode: `EXP-405-${200 + idx}`,
+            }
+          : exp
+      ),
+    }));
+  };
+
+  const handleDeleteExpense = (expenseId: string) => {
+    updateState((prev) => ({
+      ...prev,
+      expenses: prev.expenses.filter((e) => e.id !== expenseId),
+    }));
+  };
+
+  const handleAddPettyCashTopUp = (topUpData: Omit<PettyCashTopUp, 'id'>) => {
+    updateState((prev) => ({
+      ...prev,
+      pettyCashTopUps: [{ ...topUpData, id: `top-${Date.now()}` }, ...prev.pettyCashTopUps],
+    }));
+  };
+
   const handleReplyConsultation = (threadId: string, senderName: string, text: string) => {
     updateState((prev) => ({
       ...prev,
@@ -340,7 +412,7 @@ export default function App() {
         c.id === threadId
           ? {
               ...c,
-              updatedAt: '2026-11-13 13:20',
+              updatedAt: '2026-11-19 13:20',
               messages: [
                 ...c.messages,
                 {
@@ -348,7 +420,7 @@ export default function App() {
                   sender: 'doctor',
                   senderName,
                   text,
-                  createdAt: '2026-11-13 13:20',
+                  createdAt: '2026-11-19 13:20',
                 },
               ],
             }
@@ -377,7 +449,7 @@ export default function App() {
           systemicConditions: [],
           medications: 'نامشخص',
           medicalNotes: `تبدیل‌شده از مشاوره آنلاین: ${thread.subject}`,
-          createdAt: '2026-11-13',
+          createdAt: '2026-11-19',
           teethChart: {},
           clinicalHistory: [],
           documents: [],
@@ -393,7 +465,7 @@ export default function App() {
         patientPhone: patient.phone,
         doctorId: thread.doctorId,
         doctorName: thread.doctorName,
-        date: '2026-11-14',
+        date: '2026-11-21',
         time: '12:00',
         durationMinutes: 30,
         service: thread.subject,
@@ -418,6 +490,7 @@ export default function App() {
     doctorId: string;
     date: string;
     time: string;
+    shiftLabel?: string;
     service: string;
     patientName: string;
     phone: string;
@@ -444,7 +517,7 @@ export default function App() {
           systemicConditions: [],
           medications: 'ثبت‌نشده',
           medicalNotes: 'تشکیل پرونده از طریق رزرو آنلاین بیمار',
-          createdAt: '2026-11-13',
+          createdAt: '2026-11-19',
           teethChart: {},
           clinicalHistory: [],
           documents: [],
@@ -462,7 +535,8 @@ export default function App() {
         doctorName: doctor?.name ?? 'پزشک کلینیک',
         date: data.date,
         time: data.time,
-        durationMinutes: 30,
+        shiftLabel: data.shiftLabel,
+        durationMinutes: prev.bookingConfigs[data.doctorId]?.slotDurationMinutes ?? 30,
         service: data.service,
         status: 'confirmed',
         source: 'online',
@@ -495,14 +569,14 @@ export default function App() {
         doctorName: doc?.name ?? 'دکتر سارا محمدی',
         subject: data.subject,
         status: 'open',
-        updatedAt: '2026-11-13 13:25',
+        updatedAt: '2026-11-19 13:25',
         messages: [
           {
             id: `msg-${Date.now()}`,
             sender: 'patient',
             senderName: data.patientName,
             text: data.message,
-            createdAt: '2026-11-13 13:25',
+            createdAt: '2026-11-19 13:25',
           },
         ],
       };
@@ -532,9 +606,13 @@ export default function App() {
   };
 
   const handleAddStaff = (member: Omit<StaffMember, 'id'>) => {
+    const newId = `st-${Date.now()}`;
     updateState((prev) => ({
       ...prev,
-      staff: [...prev.staff, { ...member, id: `st-${Date.now()}` }],
+      staff: [...prev.staff, { ...member, id: newId }],
+      bookingConfigs: member.isDoctor
+        ? { ...prev.bookingConfigs, [newId]: createDefaultBookingConfig(newId) }
+        : prev.bookingConfigs,
     }));
   };
 
@@ -544,8 +622,59 @@ export default function App() {
     setGlobalQuery('');
   };
 
+  // =========================================================================
+  // DEDICATED PATIENT / USER PORTAL SHELL (Separated from Clinic Admin Side)
+  // =========================================================================
+  if (appSection === 'patient_portal') {
+    return (
+      <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col">
+        <header className="h-16 bg-white border-b border-slate-200 px-4 sm:px-6 sticky top-0 z-30 no-print">
+          <div className="max-w-6xl mx-auto h-full flex items-center justify-between gap-4">
+            <span className="text-lg font-bold text-slate-900 tracking-tight whitespace-nowrap shrink-0">
+              دنتاپلاس
+            </span>
+
+            <div className="hidden sm:flex items-center gap-2 text-xs text-slate-500 whitespace-nowrap">
+              <span>بخش کاربران و مراجعین</span>
+              <span aria-hidden="true">·</span>
+              <span>رزرو نوبت آنلاین و پرداخت</span>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setAppSection('clinic')}
+              className="min-h-10 inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-800 bg-slate-100 border border-slate-200 rounded-lg hover:bg-slate-200 transition-colors whitespace-nowrap shrink-0"
+            >
+              <Building2 className="w-4 h-4 text-teal-700" />
+              <span>ورود به پنل کلینیک (مطب)</span>
+            </button>
+          </div>
+        </header>
+
+        <main className="flex-1 p-4 sm:p-6 max-w-6xl w-full mx-auto">
+          <PatientPortalView
+            state={state}
+            onOnlineBooking={handleOnlineBooking}
+            onPayInvoice={handlePayInvoice}
+            onStartConsultation={handleStartConsultation}
+          />
+        </main>
+
+        <footer className="border-t border-slate-200 bg-white py-4 px-4 sm:px-6 text-xs text-slate-500">
+          <div className="max-w-6xl mx-auto flex flex-wrap items-center justify-between gap-2">
+            <span>{state.clinicName}</span>
+            <span className="font-mono tabular-nums">پشتیبانی پذیرش: {toPersianDigits(state.clinicPhone)}</span>
+          </div>
+        </footer>
+      </div>
+    );
+  }
+
+  // =========================================================================
+  // CLINIC / DENTAL OFFICE MANAGEMENT SHELL
+  // =========================================================================
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 flex">
+    <div className="min-h-screen bg-slate-50 text-slate-900 flex overflow-x-clip">
       {/* Mobile Sidebar Drawer Backdrop */}
       {mobileMenuOpen && (
         <div
@@ -574,7 +703,34 @@ export default function App() {
           </button>
         </div>
 
-        <nav className="flex-1 p-3 space-y-1 overflow-y-auto" aria-label="منوی اصلی سامانه">
+        {/* Dedicated Clinic vs User Portal Switcher */}
+        <div className="p-3 border-b border-slate-100">
+          <div
+            className="grid grid-cols-2 gap-1 p-1 bg-slate-100 rounded-lg"
+            role="group"
+            aria-label="انتخاب بخش کلینیک یا بخش کاربر"
+          >
+            <button
+              type="button"
+              onClick={() => setAppSection('clinic')}
+              className="min-h-9 px-2 py-1 text-xs font-semibold rounded-md bg-white text-teal-800 shadow-xs whitespace-nowrap"
+            >
+              پنل کلینیک
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAppSection('patient_portal');
+                setMobileMenuOpen(false);
+              }}
+              className="min-h-9 px-2 py-1 text-xs font-medium rounded-md text-slate-600 hover:text-slate-900 whitespace-nowrap"
+            >
+              بخش رزرو کاربر
+            </button>
+          </div>
+        </div>
+
+        <nav className="flex-1 p-3 space-y-1 overflow-y-auto" aria-label="منوی مدیریت مطب">
           {visibleNavItems.map((item) => {
             const Icon = item.icon;
             const active = effectiveView === item.id;
@@ -594,9 +750,7 @@ export default function App() {
                 }`}
               >
                 <Icon
-                  className={`w-4 h-4 shrink-0 ${
-                    active ? 'text-teal-700' : 'text-slate-400'
-                  }`}
+                  className={`w-4 h-4 shrink-0 ${active ? 'text-teal-700' : 'text-slate-400'}`}
                 />
                 <span className="truncate">{item.label}</span>
               </button>
@@ -604,103 +758,111 @@ export default function App() {
           })}
         </nav>
 
-        <div className="p-4 border-t border-slate-200 text-xs text-slate-500 space-y-1">
-          <div className="font-semibold text-slate-800 truncate">{state.clinicName}</div>
-          <div className="font-mono tabular-nums">{toPersianDigits(state.clinicPhone)}</div>
+        <div className="p-3 border-t border-slate-200 space-y-2">
+          <button
+            type="button"
+            onClick={() => {
+              setAppSection('patient_portal');
+              setMobileMenuOpen(false);
+            }}
+            className="w-full min-h-10 inline-flex items-center justify-center gap-2 px-3 py-2 text-xs font-semibold text-teal-800 bg-teal-50 border border-teal-200 rounded-lg hover:bg-teal-100 transition-colors"
+          >
+            <Globe className="w-4 h-4" />
+            <span>مشاهده صفحه رزرو آنلاین بیمار</span>
+          </button>
+          <div className="px-1 text-xs text-slate-500 space-y-0.5">
+            <div className="font-semibold text-slate-800 truncate">{state.clinicName}</div>
+            <div className="font-mono tabular-nums">{toPersianDigits(state.clinicPhone)}</div>
+          </div>
         </div>
       </aside>
 
       {/* Main Content Shell */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top Header Bar */}
-        <header className="h-16 bg-white border-b border-slate-200 px-4 sm:px-6 flex items-center justify-between gap-4 sticky top-0 z-30 no-print">
+        <header className="h-16 bg-white border-b border-slate-200 px-3 sm:px-6 flex items-center justify-between gap-2 sm:gap-4 sticky top-0 z-30 no-print">
           {/* Zone 1: Mobile Menu + Breadcrumb */}
-          <div className="flex items-center gap-3 min-w-0 shrink-0">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <button
               type="button"
               onClick={() => setMobileMenuOpen(true)}
               aria-label="باز کردن منوی ناوبری"
-              className="lg:hidden min-h-10 min-w-10 flex items-center justify-center text-slate-600 hover:text-slate-900 bg-slate-100 rounded-lg"
+              className="lg:hidden min-h-10 min-w-10 shrink-0 flex items-center justify-center text-slate-600 hover:text-slate-900 bg-slate-100 rounded-lg"
             >
               <Menu className="w-5 h-5" />
             </button>
-            <div className="flex items-center gap-2 text-sm whitespace-nowrap">
-              <span className="hidden sm:inline text-slate-400">دنتاپلاس</span>
-              <span className="hidden sm:inline text-slate-300">/</span>
+            <div className="flex items-center gap-2 text-sm min-w-0">
+              <span className="hidden sm:inline text-slate-400 shrink-0">پنل کلینیک</span>
+              <span className="hidden sm:inline text-slate-300 shrink-0">/</span>
               <h1 className="font-semibold text-slate-900 truncate">{activeNavTitle}</h1>
             </div>
           </div>
 
           {/* Zone 2: Global Fast Patient Search */}
-          {currentRole !== 'patient' && (
-            <div className="relative flex-1 max-w-md hidden md:block">
-              <Search className="w-4 h-4 text-slate-400 absolute right-3 top-3" />
-              <input
-                type="search"
-                value={globalQuery}
-                onChange={(e) => setGlobalQuery(e.target.value)}
-                aria-label="جستجوی سریع بیمار"
-                placeholder="جستجوی سریع پرونده (نام، همراه، کدملی، کد بیمار)..."
-                className="w-full min-h-10 pr-9 pl-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:bg-white focus:border-teal-600"
-              />
-              {globalResults.length > 0 && (
-                <div className="absolute top-11 right-0 left-0 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden z-40 divide-y divide-slate-100">
-                  {globalResults.map((p) => (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onClick={() => openPatientEhr(p.id)}
-                      className="w-full text-right px-3.5 py-2.5 hover:bg-teal-50/60 flex items-center justify-between text-xs"
-                    >
-                      <div>
-                        <span className="font-semibold text-slate-900">{p.fullName}</span>
-                        <span className="text-slate-500 mr-2 font-mono tabular-nums">
-                          {toPersianDigits(p.phone)} · {toPersianDigits(p.nationalId)}
-                        </span>
-                      </div>
-                      <span className="font-mono font-semibold text-teal-700">
-                        {p.patientCode}
+          <div className="relative flex-1 max-w-md hidden md:block">
+            <Search className="w-4 h-4 text-slate-400 absolute right-3 top-3" />
+            <input
+              type="search"
+              value={globalQuery}
+              onChange={(e) => setGlobalQuery(e.target.value)}
+              aria-label="جستجوی سریع بیمار"
+              placeholder="جستجوی سریع پرونده (نام، همراه، کدملی، کد بیمار)..."
+              className="w-full min-h-10 pr-9 pl-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:bg-white focus:border-teal-600"
+            />
+            {globalResults.length > 0 && (
+              <div className="absolute top-11 right-0 left-0 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden z-40 divide-y divide-slate-100">
+                {globalResults.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => openPatientEhr(p.id)}
+                    className="w-full text-right px-3.5 py-2.5 hover:bg-teal-50/60 flex items-center justify-between text-xs"
+                  >
+                    <div>
+                      <span className="font-semibold text-slate-900">{p.fullName}</span>
+                      <span className="text-slate-500 mr-2 font-mono tabular-nums">
+                        {toPersianDigits(p.phone)} · {toPersianDigits(p.nationalId)}
                       </span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+                    </div>
+                    <span className="font-mono font-semibold text-teal-700">
+                      {p.patientCode}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
-          {/* Zone 3: Role / Workspace Switcher */}
+          {/* Zone 3: Staff Role Switcher */}
           <div className="flex items-center gap-2 shrink-0">
             <label htmlFor="role-switcher" className="sr-only">
-              تغییر کاربر یا نقش فعال
+              تغییر کاربر یا نقش فعال پرسنل
             </label>
             <select
               id="role-switcher"
-              value={activeActorId}
-              onChange={(e) => {
-                const nextId = e.target.value;
-                setActiveActorId(nextId);
-                if (nextId === 'patient-portal') {
-                  setActiveView('portal');
-                } else if (activeView === 'portal') {
-                  setActiveView('dashboard');
-                }
-              }}
-              className="min-h-10 px-3 py-1.5 text-xs font-medium bg-slate-100 border border-slate-200 rounded-lg text-slate-800 max-w-[190px] sm:max-w-xs truncate focus:outline-none focus:border-teal-600"
+              value={activeStaffId}
+              onChange={(e) => setActiveStaffId(e.target.value)}
+              className="min-h-10 px-2.5 sm:px-3 py-1.5 text-xs font-medium bg-slate-100 border border-slate-200 rounded-lg text-slate-800 max-w-[140px] sm:max-w-xs truncate focus:outline-none focus:border-teal-600"
             >
               {state.staff
                 .filter((s) => s.active)
                 .map((s) => (
                   <option key={s.id} value={s.id}>
-                    {s.name} ({s.role === 'dentist' ? 'دندانپزشک' : s.role === 'secretary' ? 'منشی' : 'دستیار'})
+                    {s.name} (
+                    {s.role === 'dentist'
+                      ? 'دندانپزشک'
+                      : s.role === 'secretary'
+                      ? 'منشی'
+                      : 'دستیار'}
+                    )
                   </option>
                 ))}
-              <option value="patient-portal">پورتال آنلاین بیمار (رزرو و پرداخت)</option>
             </select>
           </div>
         </header>
 
         {/* Main Viewport */}
-        <main className="flex-1 p-4 sm:p-6 max-w-[1380px] w-full mx-auto">
+        <main className="flex-1 p-4 sm:p-6 max-w-[1380px] w-full mx-auto min-w-0 overflow-x-clip">
           {effectiveView === 'dashboard' && (
             <DashboardView
               state={state}
@@ -726,6 +888,16 @@ export default function App() {
                 updateState((prev) => ({ ...prev, smsTemplate: tpl }))
               }
               onOpenPatientEhr={openPatientEhr}
+              onOpenBookingSettings={() => setActiveView('booking_settings')}
+            />
+          )}
+
+          {effectiveView === 'booking_settings' && (
+            <BookingSettingsView
+              state={state}
+              canEdit={can('manage_appointments')}
+              onSaveConfig={handleSaveBookingConfig}
+              onApplyToAllDoctors={handleApplyBookingConfigToAll}
             />
           )}
 
@@ -751,10 +923,15 @@ export default function App() {
           {effectiveView === 'billing' && (
             <BillingAccountingView
               state={state}
+              currentUserName={currentStaff?.name ?? 'کاربر مطب'}
               preselectedPatientId={invoicePatientId}
               onCreateInvoice={handleCreateInvoice}
               onPayInvoice={handlePayInvoice}
               onSyncAccounting={handleSyncAccounting}
+              onAddExpense={handleAddExpense}
+              onSyncExpenseAccounting={handleSyncExpenseAccounting}
+              onDeleteExpense={handleDeleteExpense}
+              onAddPettyCashTopUp={handleAddPettyCashTopUp}
             />
           )}
 
@@ -775,15 +952,6 @@ export default function App() {
               onTogglePermission={handleTogglePermission}
               onToggleActive={handleToggleStaffActive}
               onAddStaff={handleAddStaff}
-            />
-          )}
-
-          {effectiveView === 'portal' && (
-            <PatientPortalView
-              state={state}
-              onOnlineBooking={handleOnlineBooking}
-              onPayInvoice={handlePayInvoice}
-              onStartConsultation={handleStartConsultation}
             />
           )}
         </main>

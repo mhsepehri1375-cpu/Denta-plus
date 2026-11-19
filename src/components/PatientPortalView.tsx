@@ -1,18 +1,22 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
+  AlertCircle,
   CalendarCheck,
   CheckCircle2,
+  Clock,
   CreditCard,
+  MapPin,
   MessageSquarePlus,
+  Phone,
   Search,
+  Users,
 } from 'lucide-react';
 import type { ClinicState, Invoice } from '../types/clinic';
 import {
   calculateInvoiceTotals,
-  DEFAULT_CLINIC_SLOTS,
   formatCurrencyToman,
   formatPersianDate,
-  getAvailableSlots,
+  getDoctorDayAvailability,
   normalizeDigits,
   toPersianDigits,
 } from '../utils/clinicLogic';
@@ -25,6 +29,7 @@ interface PatientPortalViewProps {
     doctorId: string;
     date: string;
     time: string;
+    shiftLabel?: string;
     service: string;
     patientName: string;
     phone: string;
@@ -51,13 +56,17 @@ export const PatientPortalView: React.FC<PatientPortalViewProps> = ({
 
   // Booking State
   const [selectedDoctorId, setSelectedDoctorId] = useState(doctors[0]?.id ?? '');
-  const [bookDate, setBookDate] = useState('2026-11-14');
-  const [bookTime, setBookTime] = useState('09:30');
+  const [bookDate, setBookDate] = useState('2026-11-21'); // Saturday (working day)
+  const [bookTime, setBookTime] = useState('');
+  const [selectedWindowId, setSelectedWindowId] = useState('');
   const [bookService, setBookService] = useState('معاینه و مشاوره تخصصی');
   const [patientName, setPatientName] = useState('');
   const [patientPhone, setPatientPhone] = useState('');
   const [patientNationalId, setPatientNationalId] = useState('');
-  const [bookingConfirmedCode, setBookingConfirmedCode] = useState<string | null>(null);
+  const [bookingConfirmed, setBookingConfirmed] = useState<{
+    code: string;
+    timeDisplay: string;
+  } | null>(null);
 
   // Payment Lookup State
   const [invoiceSearch, setInvoiceSearch] = useState('');
@@ -71,26 +80,72 @@ export const PatientPortalView: React.FC<PatientPortalViewProps> = ({
   const [conMessage, setConMessage] = useState('');
   const [conSent, setConSent] = useState(false);
 
-  const openSlots = getAvailableSlots(
+  const doctorConfig = state.bookingConfigs[selectedDoctorId];
+  const availability = getDoctorDayAvailability(
+    doctorConfig,
     state.appointments,
     selectedDoctorId,
-    bookDate,
-    DEFAULT_CLINIC_SLOTS
+    bookDate
   );
+
+  useEffect(() => {
+    if (availability.enableExactTimeSlots) {
+      if (!availability.availableSlots.includes(bookTime)) {
+        setBookTime(availability.availableSlots[0] ?? '');
+      }
+    } else {
+      if (!availability.windows.some((w) => w.id === selectedWindowId)) {
+        setSelectedWindowId(availability.windows[0]?.id ?? '');
+      }
+    }
+  }, [
+    selectedDoctorId,
+    bookDate,
+    availability.enableExactTimeSlots,
+    availability.availableSlots.join(','),
+    availability.windows.map((w) => w.id).join(','),
+  ]);
+
+  const canSubmitBooking =
+    availability.isWorkingDay &&
+    availability.remainingCapacity > 0 &&
+    (availability.enableExactTimeSlots
+      ? Boolean(bookTime)
+      : Boolean(selectedWindowId) || availability.windows.length > 0);
 
   const handleBookSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedDoctorId || !bookTime || !patientName.trim() || !patientPhone.trim()) return;
+    if (!selectedDoctorId || !canSubmitBooking || !patientName.trim() || !patientPhone.trim()) {
+      return;
+    }
+
+    const activeWindow =
+      availability.windows.find((w) => w.id === selectedWindowId) ?? availability.windows[0];
+    const windowSummary = activeWindow
+      ? `${activeWindow.label} (${toPersianDigits(activeWindow.start)} تا ${toPersianDigits(
+          activeWindow.end
+        )})`
+      : 'پذیرش روزانه';
+
+    const chosenTime = availability.enableExactTimeSlots ? bookTime : windowSummary;
+
     const res = onOnlineBooking({
       doctorId: selectedDoctorId,
       date: bookDate,
-      time: bookTime,
+      time: chosenTime,
+      shiftLabel: availability.enableExactTimeSlots ? undefined : windowSummary,
       service: bookService,
       patientName: patientName.trim(),
       phone: patientPhone.trim(),
       nationalId: patientNationalId.trim() || '0000000000',
     });
-    setBookingConfirmedCode(res.bookingCode);
+
+    setBookingConfirmed({
+      code: res.bookingCode,
+      timeDisplay: availability.enableExactTimeSlots
+        ? `ساعت ${toPersianDigits(bookTime)}`
+        : windowSummary,
+    });
   };
 
   const unpaidInvoices = state.invoices.filter((inv) => {
@@ -129,24 +184,31 @@ export const PatientPortalView: React.FC<PatientPortalViewProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Portal Hero / Mode Selector */}
-      <div className="bg-white border border-slate-200 rounded-xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-lg font-bold text-slate-900">
-            پورتال آنلاین مراجعین {state.clinicName}
+      {/* Patient Portal Welcome Hero */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div className="space-y-1.5">
+          <h2 className="text-xl font-bold text-slate-900">
+            پورتال رزرو نوبت آنلاین · {state.clinicName}
           </h2>
-          <p className="text-xs text-slate-500 mt-1">
-            انتخاب دندانپزشک و رزرو نوبت آنلاین · تسویه مستقیم فاکتور · مشاوره آنلاین پیش از درمان
-          </p>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
+            <span className="inline-flex items-center gap-1">
+              <MapPin className="w-3.5 h-3.5 text-teal-600" />
+              {state.clinicAddress}
+            </span>
+            <span className="inline-flex items-center gap-1 font-mono tabular-nums">
+              <Phone className="w-3.5 h-3.5 text-teal-600" />
+              {toPersianDigits(state.clinicPhone)}
+            </span>
+          </div>
         </div>
 
-        <div className="grid grid-cols-3 sm:inline-flex items-center gap-1 p-1 bg-slate-100 rounded-lg w-full sm:w-auto">
+        <div className="grid grid-cols-3 sm:inline-flex items-center gap-1 p-1 bg-slate-100 rounded-xl w-full sm:w-auto">
           <button
             type="button"
             onClick={() => setPortalTab('booking')}
-            className={`min-h-9 px-2 sm:px-3.5 py-1.5 text-[11px] sm:text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
+            className={`min-h-10 px-2.5 sm:px-4 py-1.5 text-[11px] sm:text-xs font-medium rounded-lg transition-colors whitespace-nowrap ${
               portalTab === 'booking'
-                ? 'bg-white text-slate-900 shadow-xs'
+                ? 'bg-white text-slate-900 shadow-xs font-semibold'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
@@ -155,9 +217,9 @@ export const PatientPortalView: React.FC<PatientPortalViewProps> = ({
           <button
             type="button"
             onClick={() => setPortalTab('payment')}
-            className={`min-h-9 px-2 sm:px-3.5 py-1.5 text-[11px] sm:text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
+            className={`min-h-10 px-2.5 sm:px-4 py-1.5 text-[11px] sm:text-xs font-medium rounded-lg transition-colors whitespace-nowrap ${
               portalTab === 'payment'
-                ? 'bg-white text-slate-900 shadow-xs'
+                ? 'bg-white text-slate-900 shadow-xs font-semibold'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
@@ -166,9 +228,9 @@ export const PatientPortalView: React.FC<PatientPortalViewProps> = ({
           <button
             type="button"
             onClick={() => setPortalTab('consult')}
-            className={`min-h-9 px-2 sm:px-3.5 py-1.5 text-[11px] sm:text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
+            className={`min-h-10 px-2.5 sm:px-4 py-1.5 text-[11px] sm:text-xs font-medium rounded-lg transition-colors whitespace-nowrap ${
               portalTab === 'consult'
-                ? 'bg-white text-slate-900 shadow-xs'
+                ? 'bg-white text-slate-900 shadow-xs font-semibold'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
@@ -181,20 +243,24 @@ export const PatientPortalView: React.FC<PatientPortalViewProps> = ({
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           {/* Step 1: Select Doctor */}
           <div className="lg:col-span-5 space-y-3">
-            <h3 className="text-sm font-semibold text-slate-800">
-              ۱. انتخاب دندانپزشک متخصص
-            </h3>
+            <h3 className="text-sm font-bold text-slate-800">۱. انتخاب دندانپزشک متخصص</h3>
             <div className="space-y-3">
               {doctors.map((doc) => {
                 const selected = doc.id === selectedDoctorId;
+                const docCfg = state.bookingConfigs[doc.id];
+                const docAvail = getDoctorDayAvailability(
+                  docCfg,
+                  state.appointments,
+                  doc.id,
+                  bookDate
+                );
                 return (
                   <button
                     key={doc.id}
                     type="button"
                     onClick={() => {
                       setSelectedDoctorId(doc.id);
-                      const slots = getAvailableSlots(state.appointments, doc.id, bookDate);
-                      setBookTime(slots[0] ?? '');
+                      setBookingConfirmed(null);
                     }}
                     className={`w-full text-right bg-white border rounded-xl p-4 flex items-start gap-3.5 transition-colors ${
                       selected
@@ -212,10 +278,23 @@ export const PatientPortalView: React.FC<PatientPortalViewProps> = ({
                     ) : (
                       <div className="w-14 h-14 rounded-xl bg-slate-100 shrink-0" />
                     )}
-                    <div className="space-y-1">
+                    <div className="space-y-1 flex-1 min-w-0">
                       <div className="font-bold text-sm text-slate-900">{doc.name}</div>
                       <div className="text-xs font-medium text-teal-700">{doc.specialty}</div>
-                      {doc.bio && <p className="text-xs text-slate-500 leading-relaxed">{doc.bio}</p>}
+                      {doc.bio && (
+                        <p className="text-xs text-slate-500 leading-relaxed">{doc.bio}</p>
+                      )}
+                      <div className="text-[11px] text-slate-500 pt-1 tabular-nums">
+                        {docAvail.isWorkingDay
+                          ? docAvail.enableExactTimeSlots
+                            ? `نوبت‌دهی ساعتی · ظرفیت باقیمانده: ${toPersianDigits(
+                                docAvail.remainingCapacity
+                              )} نفر`
+                            : `پذیرش بازه‌ای (بدون ساعت دقیق) · ظرفیت باقیمانده: ${toPersianDigits(
+                                docAvail.remainingCapacity
+                              )} نفر`
+                          : 'عدم حضور در تاریخ انتخابی'}
+                      </div>
                     </div>
                   </button>
                 );
@@ -223,9 +302,9 @@ export const PatientPortalView: React.FC<PatientPortalViewProps> = ({
             </div>
           </div>
 
-          {/* Step 2 & 3: Slot & Form */}
-          <div className="lg:col-span-7 bg-white border border-slate-200 rounded-xl p-5">
-            {bookingConfirmedCode ? (
+          {/* Step 2 & 3: Dynamic Schedule & Form */}
+          <div className="lg:col-span-7 bg-white border border-slate-200 rounded-xl p-5 sm:p-6">
+            {bookingConfirmed ? (
               <div className="py-8 text-center space-y-4">
                 <CheckCircle2 className="w-12 h-12 text-emerald-600 mx-auto" />
                 <h3 className="text-lg font-bold text-slate-900">
@@ -233,13 +312,15 @@ export const PatientPortalView: React.FC<PatientPortalViewProps> = ({
                 </h3>
                 <p className="text-sm text-slate-600">
                   کد رهگیری رزرو:{' '}
-                  <span className="font-mono font-bold text-teal-700">{bookingConfirmedCode}</span> ·
-                  تاریخ {formatPersianDate(bookDate, true)} ساعت {toPersianDigits(bookTime)}
+                  <span className="font-mono font-bold text-teal-700">
+                    {bookingConfirmed.code}
+                  </span>{' '}
+                  · تاریخ {formatPersianDate(bookDate, true)} · {bookingConfirmed.timeDisplay}
                 </p>
                 <button
                   type="button"
                   onClick={() => {
-                    setBookingConfirmedCode(null);
+                    setBookingConfirmed(null);
                     setPatientName('');
                     setPatientPhone('');
                     setPatientNationalId('');
@@ -250,26 +331,33 @@ export const PatientPortalView: React.FC<PatientPortalViewProps> = ({
                 </button>
               </div>
             ) : (
-              <form onSubmit={handleBookSubmit} className="space-y-4">
-                <h3 className="text-sm font-semibold text-slate-800">
-                  ۲. انتخاب تاریخ، ساعت آزاد و مشخصات بیمار
-                </h3>
+              <form onSubmit={handleBookSubmit} className="space-y-5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="text-sm font-bold text-slate-800">
+                    ۲. انتخاب تاریخ، زمان مراجعه و مشخصات بیمار
+                  </h3>
+                  {availability.isWorkingDay && (
+                    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-teal-800 tabular-nums">
+                      <Users className="w-3.5 h-3.5" />
+                      ظرفیت باقیمانده: {toPersianDigits(availability.remainingCapacity)} از{' '}
+                      {toPersianDigits(availability.dailyCapacity)} نفر
+                    </span>
+                  )}
+                </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">تاریخ مراجعه</label>
+                    <label
+                      htmlFor="portal-book-date"
+                      className="block text-xs font-medium text-slate-700 mb-1"
+                    >
+                      تاریخ مراجعه
+                    </label>
                     <input
+                      id="portal-book-date"
                       type="date"
                       value={bookDate}
-                      onChange={(e) => {
-                        setBookDate(e.target.value);
-                        const slots = getAvailableSlots(
-                          state.appointments,
-                          selectedDoctorId,
-                          e.target.value
-                        );
-                        setBookTime(slots[0] ?? '');
-                      }}
+                      onChange={(e) => setBookDate(e.target.value)}
                       className="w-full min-h-10 px-3 py-2 text-sm font-mono tabular-nums border border-slate-300 rounded-lg"
                     />
                     <span className="text-[11px] text-slate-500 mt-1 block">
@@ -277,8 +365,14 @@ export const PatientPortalView: React.FC<PatientPortalViewProps> = ({
                     </span>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">خدمت مورد نظر</label>
+                    <label
+                      htmlFor="portal-book-service"
+                      className="block text-xs font-medium text-slate-700 mb-1"
+                    >
+                      خدمت مورد نظر
+                    </label>
                     <select
+                      id="portal-book-service"
                       value={bookService}
                       onChange={(e) => setBookService(e.target.value)}
                       className="w-full min-h-10 px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg"
@@ -292,37 +386,87 @@ export const PatientPortalView: React.FC<PatientPortalViewProps> = ({
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1.5">
-                    ساعت‌های آزاد پزشک انتخاب‌شده
-                  </label>
-                  {openSlots.length === 0 ? (
-                    <p className="text-xs text-red-600">
-                      در این تاریخ نوبت آزادی برای این پزشک باقی نمانده است.
-                    </p>
-                  ) : (
-                    <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
-                      {openSlots.slice(0, 12).map((slot) => (
-                        <button
-                          key={slot}
-                          type="button"
-                          onClick={() => setBookTime(slot)}
-                          className={`min-h-10 text-xs font-mono tabular-nums rounded-lg border transition-colors ${
-                            bookTime === slot
-                              ? 'bg-teal-600 text-white border-teal-600 font-semibold'
-                              : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                          }`}
-                        >
-                          {toPersianDigits(slot)}
-                        </button>
-                      ))}
+                {/* Availability Area */}
+                {!availability.isWorkingDay || availability.remainingCapacity <= 0 ? (
+                  <div className="flex items-center gap-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>
+                      {availability.reason || 'امکان رزرو در این تاریخ وجود ندارد. روز دیگری را انتخاب کنید.'}
+                    </span>
+                  </div>
+                ) : availability.enableExactTimeSlots ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs text-slate-700">
+                      <span className="font-medium inline-flex items-center gap-1">
+                        <Clock className="w-3.5 h-3.5 text-teal-600" />
+                        ساعت‌های آزاد پزشک در این روز
+                      </span>
+                      <span className="text-slate-500 tabular-nums">
+                        {toPersianDigits(availability.availableSlots.length)} ساعت آزاد
+                      </span>
                     </div>
-                  )}
-                </div>
+                    {availability.availableSlots.length === 0 ? (
+                      <p className="text-xs text-red-600">
+                        تمام ساعت‌های این روز رزرو شده است.
+                      </p>
+                    ) : (
+                      <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                        {availability.availableSlots.map((slot) => (
+                          <button
+                            key={slot}
+                            type="button"
+                            onClick={() => setBookTime(slot)}
+                            className={`min-h-10 text-xs font-mono tabular-nums rounded-lg border transition-colors ${
+                              bookTime === slot
+                                ? 'bg-teal-600 text-white border-teal-600 font-semibold'
+                                : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                            }`}
+                          >
+                            {toPersianDigits(slot)}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    <div className="text-xs font-medium text-slate-700">
+                      انتخاب بازه زمانی حضور (نوبت‌دهی بدون ساعت دقیق بر اساس ظرفیت روزانه)
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      {availability.windows.map((win) => {
+                        const isSel = selectedWindowId === win.id;
+                        return (
+                          <button
+                            key={win.id}
+                            type="button"
+                            onClick={() => setSelectedWindowId(win.id)}
+                            className={`p-3.5 rounded-xl border text-right transition-colors ${
+                              isSel
+                                ? 'bg-teal-600 text-white border-teal-600'
+                                : 'bg-slate-50 text-slate-800 border-slate-200 hover:border-teal-500'
+                            }`}
+                          >
+                            <div className="text-sm font-bold">{win.label}</div>
+                            <div
+                              className={`text-xs mt-1 font-mono tabular-nums ${
+                                isSel ? 'text-teal-50' : 'text-slate-500'
+                              }`}
+                            >
+                              بازه حضور: {toPersianDigits(win.start)} تا {toPersianDigits(win.end)}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-slate-100">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t border-slate-100">
                   <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">نام کامل بیمار</label>
+                    <label className="block text-xs font-medium text-slate-700 mb-1">
+                      نام کامل بیمار
+                    </label>
                     <input
                       type="text"
                       required
@@ -333,7 +477,9 @@ export const PatientPortalView: React.FC<PatientPortalViewProps> = ({
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">شماره همراه</label>
+                    <label className="block text-xs font-medium text-slate-700 mb-1">
+                      شماره همراه
+                    </label>
                     <input
                       type="tel"
                       required
@@ -359,7 +505,7 @@ export const PatientPortalView: React.FC<PatientPortalViewProps> = ({
 
                 <button
                   type="submit"
-                  disabled={!bookTime}
+                  disabled={!canSubmitBooking}
                   className="w-full min-h-11 inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold text-white bg-teal-600 rounded-lg hover:bg-teal-700 disabled:opacity-50"
                 >
                   <CalendarCheck className="w-4 h-4" />
@@ -514,7 +660,9 @@ export const PatientPortalView: React.FC<PatientPortalViewProps> = ({
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">شرح سوال یا مشکل دندانی</label>
+              <label className="block text-xs font-medium text-slate-700 mb-1">
+                شرح سوال یا مشکل دندانی
+              </label>
               <textarea
                 rows={4}
                 required

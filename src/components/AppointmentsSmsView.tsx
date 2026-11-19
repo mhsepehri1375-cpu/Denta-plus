@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   AlertCircle,
   Calendar,
+  CalendarCog,
   Check,
   MessageSquareText,
   Plus,
@@ -16,9 +17,8 @@ import type {
   StaffMember,
 } from '../types/clinic';
 import {
-  DEFAULT_CLINIC_SLOTS,
   formatPersianDate,
-  getAvailableSlots,
+  getDoctorDayAvailability,
   hasAppointmentConflict,
   renderSmsTemplate,
   toPersianDigits,
@@ -34,6 +34,7 @@ interface AppointmentsSmsViewProps {
   onSendSmsReminder: (appointment: Appointment, customMessage?: string) => void;
   onUpdateSmsTemplate: (template: string) => void;
   onOpenPatientEhr: (patientId: string) => void;
+  onOpenBookingSettings: () => void;
 }
 
 const STATUS_MAP: Record<AppointmentStatus, { label: string; style: string }> = {
@@ -54,10 +55,11 @@ export const AppointmentsSmsView: React.FC<AppointmentsSmsViewProps> = ({
   onSendSmsReminder,
   onUpdateSmsTemplate,
   onOpenPatientEhr,
+  onOpenBookingSettings,
 }) => {
   const doctors: StaffMember[] = state.staff.filter((s) => s.isDoctor && s.active);
   const [activeTab, setActiveTab] = useState<'schedule' | 'sms'>('schedule');
-  const [selectedDate, setSelectedDate] = useState<string>('2026-11-13');
+  const [selectedDate, setSelectedDate] = useState<string>('2026-11-19');
   const [doctorFilter, setDoctorFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
@@ -65,8 +67,9 @@ export const AppointmentsSmsView: React.FC<AppointmentsSmsViewProps> = ({
   const [showNewModal, setShowNewModal] = useState(false);
   const [patientId, setPatientId] = useState<string>(state.patients[0]?.id ?? '');
   const [doctorId, setDoctorId] = useState<string>(doctors[0]?.id ?? '');
-  const [aptDate, setAptDate] = useState<string>('2026-11-13');
+  const [aptDate, setAptDate] = useState<string>('2026-11-19');
   const [aptTime, setAptTime] = useState<string>('11:00');
+  const [aptWindowLabel, setAptWindowLabel] = useState<string>('');
   const [duration, setDuration] = useState<number>(30);
   const [service, setService] = useState<string>('معاینه و جرم‌گیری');
   const [notes, setNotes] = useState<string>('');
@@ -85,21 +88,34 @@ export const AppointmentsSmsView: React.FC<AppointmentsSmsViewProps> = ({
     })
     .sort((a, b) => a.time.localeCompare(b.time));
 
-  const availableSlots = getAvailableSlots(
+  const modalAvailability = getDoctorDayAvailability(
+    state.bookingConfigs[doctorId],
     state.appointments,
     doctorId,
-    aptDate,
-    DEFAULT_CLINIC_SLOTS
+    aptDate
   );
 
   const handleOpenNew = () => {
     const firstPatient = state.patients[0]?.id ?? '';
     const firstDoc = doctors[0]?.id ?? '';
+    const targetDate = selectedDate || '2026-11-19';
     setPatientId(firstPatient);
     setDoctorId(firstDoc);
-    setAptDate(selectedDate || '2026-11-13');
-    const slots = getAvailableSlots(state.appointments, firstDoc, selectedDate || '2026-11-13');
-    setAptTime(slots[0] ?? '09:00');
+    setAptDate(targetDate);
+    const avail = getDoctorDayAvailability(
+      state.bookingConfigs[firstDoc],
+      state.appointments,
+      firstDoc,
+      targetDate
+    );
+    setAptTime(avail.availableSlots[0] ?? '09:00');
+    setAptWindowLabel(
+      avail.windows[0]
+        ? `${avail.windows[0].label} (${toPersianDigits(avail.windows[0].start)} تا ${toPersianDigits(
+            avail.windows[0].end
+          )})`
+        : 'پذیرش روزانه'
+    );
     setFormError('');
     setShowNewModal(true);
   };
@@ -116,10 +132,27 @@ export const AppointmentsSmsView: React.FC<AppointmentsSmsViewProps> = ({
       setFormError('عنوان خدمت یا علت مراجعه را وارد کنید.');
       return;
     }
-    if (hasAppointmentConflict(state.appointments, doctor.id, aptDate, aptTime, duration)) {
+    if (!modalAvailability.isWorkingDay) {
+      setFormError(modalAvailability.reason || 'پزشک در این روز برنامه حضور ندارد.');
+      return;
+    }
+    if (modalAvailability.remainingCapacity <= 0) {
+      setFormError('ظرفیت روزانه این پزشک در تاریخ انتخابی تکمیل شده است.');
+      return;
+    }
+    if (
+      modalAvailability.enableExactTimeSlots &&
+      hasAppointmentConflict(state.appointments, doctor.id, aptDate, aptTime, duration)
+    ) {
       setFormError('این بازه زمانی با نوبت دیگری برای این پزشک تداخل دارد.');
       return;
     }
+
+    const fallbackWin = modalAvailability.windows[0]
+      ? `${modalAvailability.windows[0].label} (${toPersianDigits(
+          modalAvailability.windows[0].start
+        )} تا ${toPersianDigits(modalAvailability.windows[0].end)})`
+      : 'پذیرش روزانه';
 
     onCreateAppointment({
       patientId: patient.id,
@@ -129,7 +162,10 @@ export const AppointmentsSmsView: React.FC<AppointmentsSmsViewProps> = ({
       doctorId: doctor.id,
       doctorName: doctor.name,
       date: aptDate,
-      time: aptTime,
+      time: modalAvailability.enableExactTimeSlots ? aptTime : aptWindowLabel || fallbackWin,
+      shiftLabel: modalAvailability.enableExactTimeSlots
+        ? undefined
+        : aptWindowLabel || fallbackWin,
       durationMinutes: duration,
       service: service.trim(),
       status: 'confirmed',
@@ -190,6 +226,16 @@ export const AppointmentsSmsView: React.FC<AppointmentsSmsViewProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {canManageAppointments && (
+            <button
+              type="button"
+              onClick={onOpenBookingSettings}
+              className="min-h-10 inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-teal-800 bg-teal-50 border border-teal-200 rounded-lg hover:bg-teal-100 transition-colors whitespace-nowrap"
+            >
+              <CalendarCog className="w-4 h-4 text-teal-600" />
+              <span>تنظیمات نوبت‌گیری</span>
+            </button>
+          )}
           {canSendSms && (
             <button
               type="button"
@@ -435,7 +481,7 @@ export const AppointmentsSmsView: React.FC<AppointmentsSmsViewProps> = ({
               {renderSmsTemplate(templateDraft, {
                 patientName: 'نیلوفر پارسا',
                 doctorName: 'دکتر سارا محمدی',
-                date: '2026-11-13',
+                date: '2026-11-19',
                 time: '10:00',
                 clinicName: state.clinicName,
               })}
@@ -549,27 +595,50 @@ export const AppointmentsSmsView: React.FC<AppointmentsSmsViewProps> = ({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div
+                className={`grid grid-cols-1 ${
+                  modalAvailability.enableExactTimeSlots ? 'sm:grid-cols-3' : 'sm:grid-cols-2'
+                } gap-3`}
+              >
                 <div>
                   <label className="block text-xs font-medium text-slate-700 mb-1">تاریخ</label>
                   <input
                     type="date"
                     required
                     value={aptDate}
-                    onChange={(e) => setAptDate(e.target.value)}
+                    onChange={(e) => {
+                      const nextDate = e.target.value;
+                      setAptDate(nextDate);
+                      const avail = getDoctorDayAvailability(
+                        state.bookingConfigs[doctorId],
+                        state.appointments,
+                        doctorId,
+                        nextDate
+                      );
+                      if (avail.availableSlots[0]) setAptTime(avail.availableSlots[0]);
+                      if (avail.windows[0]) {
+                        setAptWindowLabel(
+                          `${avail.windows[0].label} (${toPersianDigits(
+                            avail.windows[0].start
+                          )} تا ${toPersianDigits(avail.windows[0].end)})`
+                        );
+                      }
+                    }}
                     className="w-full min-h-10 px-3 py-2 text-sm font-mono tabular-nums border border-slate-300 rounded-lg"
                   />
                 </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">ساعت</label>
-                  <input
-                    type="time"
-                    required
-                    value={aptTime}
-                    onChange={(e) => setAptTime(e.target.value)}
-                    className="w-full min-h-10 px-3 py-2 text-sm font-mono tabular-nums border border-slate-300 rounded-lg"
-                  />
-                </div>
+                {modalAvailability.enableExactTimeSlots && (
+                  <div>
+                    <label className="block text-xs font-medium text-slate-700 mb-1">ساعت دقیق</label>
+                    <input
+                      type="time"
+                      required
+                      value={aptTime}
+                      onChange={(e) => setAptTime(e.target.value)}
+                      className="w-full min-h-10 px-3 py-2 text-sm font-mono tabular-nums border border-slate-300 rounded-lg"
+                    />
+                  </div>
+                )}
                 <div>
                   <label className="block text-xs font-medium text-slate-700 mb-1">مدت (دقیقه)</label>
                   <select
@@ -585,26 +654,81 @@ export const AppointmentsSmsView: React.FC<AppointmentsSmsViewProps> = ({
                 </div>
               </div>
 
-              <div>
-                <div className="text-xs font-medium text-slate-600 mb-1.5">
-                  ساعات آزاد پیشنهادی برای {formatPersianDate(aptDate)}:
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {availableSlots.slice(0, 8).map((slot) => (
-                    <button
-                      key={slot}
-                      type="button"
-                      onClick={() => setAptTime(slot)}
-                      className={`px-2.5 py-1 text-xs font-mono tabular-nums rounded-md border transition-colors ${
-                        aptTime === slot
-                          ? 'bg-teal-600 text-white border-teal-600'
-                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+              {/* Availability Status & Slots or Shift Windows */}
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <span className="font-medium text-slate-700">
+                    وضعیت برنامه {formatPersianDate(aptDate, true)}:
+                  </span>
+                  {modalAvailability.isWorkingDay ? (
+                    <span
+                      className={`font-medium tabular-nums ${
+                        modalAvailability.remainingCapacity > 0
+                          ? 'text-emerald-700'
+                          : 'text-red-700'
                       }`}
                     >
-                      {toPersianDigits(slot)}
-                    </button>
-                  ))}
+                      ظرفیت باقیمانده: {toPersianDigits(modalAvailability.remainingCapacity)} از{' '}
+                      {toPersianDigits(modalAvailability.dailyCapacity)} نفر
+                    </span>
+                  ) : (
+                    <span className="font-medium text-red-700">
+                      {modalAvailability.reason || 'پزشک در این روز حضور ندارد'}
+                    </span>
+                  )}
                 </div>
+
+                {modalAvailability.isWorkingDay && modalAvailability.enableExactTimeSlots ? (
+                  modalAvailability.availableSlots.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {modalAvailability.availableSlots.slice(0, 10).map((slot) => (
+                        <button
+                          key={slot}
+                          type="button"
+                          onClick={() => setAptTime(slot)}
+                          className={`px-2.5 py-1 text-xs font-mono tabular-nums rounded-md border transition-colors ${
+                            aptTime === slot
+                              ? 'bg-teal-600 text-white border-teal-600'
+                              : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          {toPersianDigits(slot)}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-amber-700">
+                      ساعت خالی در این روز باقی نمانده است. می‌توانید از تنظیمات نوبت‌گیری ساعات را ویرایش کنید.
+                    </div>
+                  )
+                ) : modalAvailability.isWorkingDay && !modalAvailability.enableExactTimeSlots ? (
+                  <div className="space-y-1.5">
+                    <div className="text-[11px] text-slate-600">
+                      حالت بدون ساعت دقیق فعال است — بازه زمانی حضور بیمار را انتخاب کنید:
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {modalAvailability.windows.map((win) => {
+                        const labelText = `${win.label} (${toPersianDigits(
+                          win.start
+                        )} تا ${toPersianDigits(win.end)})`;
+                        return (
+                          <button
+                            key={win.id}
+                            type="button"
+                            onClick={() => setAptWindowLabel(labelText)}
+                            className={`px-3 py-1.5 text-xs rounded-lg border transition-colors ${
+                              aptWindowLabel === labelText
+                                ? 'bg-teal-600 text-white border-teal-600'
+                                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                            }`}
+                          >
+                            {labelText}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : null}
               </div>
 
               <div>

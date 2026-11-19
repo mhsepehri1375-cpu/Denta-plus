@@ -1,18 +1,30 @@
 import React, { useState } from 'react';
 import {
   CheckCircle2,
+  Coins,
   CreditCard,
   Download,
   FileSpreadsheet,
   Plus,
   Printer,
   RefreshCw,
+  ShoppingBag,
   Trash2,
+  Wallet,
   X,
 } from 'lucide-react';
-import type { ClinicState, Invoice, InvoiceItem } from '../types/clinic';
+import type {
+  ClinicExpense,
+  ClinicState,
+  ExpenseCategory,
+  Invoice,
+  InvoiceItem,
+  PettyCashTopUp,
+} from '../types/clinic';
 import {
   calculateInvoiceTotals,
+  computePettyCashSummary,
+  EXPENSE_CATEGORIES,
   formatCurrencyToman,
   formatPersianDate,
   toPersianDigits,
@@ -21,10 +33,15 @@ import { PaymentGatewayModal } from './PaymentGatewayModal';
 
 interface BillingAccountingViewProps {
   state: ClinicState;
+  currentUserName: string;
   preselectedPatientId?: string | null;
   onCreateInvoice: (invoice: Omit<Invoice, 'id' | 'invoiceNumber'>) => void;
   onPayInvoice: (invoiceId: string, paidAmount: number, paymentRef: string) => void;
   onSyncAccounting: (invoiceId: string) => void;
+  onAddExpense: (expense: Omit<ClinicExpense, 'id'>) => void;
+  onSyncExpenseAccounting: (expenseId: string) => void;
+  onDeleteExpense: (expenseId: string) => void;
+  onAddPettyCashTopUp: (topUp: Omit<PettyCashTopUp, 'id'>) => void;
 }
 
 const SERVICE_PRESETS = [
@@ -38,13 +55,22 @@ const SERVICE_PRESETS = [
 
 export const BillingAccountingView: React.FC<BillingAccountingViewProps> = ({
   state,
+  currentUserName,
   preselectedPatientId,
   onCreateInvoice,
   onPayInvoice,
   onSyncAccounting,
+  onAddExpense,
+  onSyncExpenseAccounting,
+  onDeleteExpense,
+  onAddPettyCashTopUp,
 }) => {
   const doctors = state.staff.filter((s) => s.isDoctor && s.active);
+  const [financeTab, setFinanceTab] = useState<'invoices' | 'purchases' | 'petty_cash'>(
+    'invoices'
+  );
   const [statusFilter, setStatusFilter] = useState<'all' | 'unpaid' | 'partial' | 'paid'>('all');
+  const [expenseCategoryFilter, setExpenseCategoryFilter] = useState<string>('all');
   const [payingInvoice, setPayingInvoice] = useState<Invoice | null>(null);
   const [printingInvoice, setPrintingInvoice] = useState<Invoice | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(Boolean(preselectedPatientId));
@@ -61,9 +87,43 @@ export const BillingAccountingView: React.FC<BillingAccountingViewProps> = ({
   const [insurance, setInsurance] = useState('0');
   const [notes, setNotes] = useState('');
 
+  // Purchase / Expense Modal
+  const [showExpenseModal, setShowExpenseModal] = useState(false);
+  const [expenseSourceMode, setExpenseSourceMode] = useState<'clinic_purchase' | 'petty_cash'>(
+    'clinic_purchase'
+  );
+  const [expTitle, setExpTitle] = useState('');
+  const [expCategory, setExpCategory] = useState<ExpenseCategory>('مواد مصرفی دندانپزشکی');
+  const [expVendor, setExpVendor] = useState('');
+  const [expAmount, setExpAmount] = useState('');
+  const [expDate, setExpDate] = useState('2026-11-19');
+  const [expPaymentMethod, setExpPaymentMethod] = useState<ClinicExpense['paymentMethod']>(
+    'کارت بانکی مطب'
+  );
+  const [expReceipt, setExpReceipt] = useState('');
+  const [expNotes, setExpNotes] = useState('');
+  const [expError, setExpError] = useState('');
+
+  // Petty Cash Top-Up Modal
+  const [showTopUpModal, setShowTopUpModal] = useState(false);
+  const [topUpAmount, setTopUpAmount] = useState('2000000');
+  const [topUpDate, setTopUpDate] = useState('2026-11-19');
+  const [topUpCustodian, setTopUpCustodian] = useState('مریم کریمی (منشی)');
+  const [topUpDesc, setTopUpDesc] = useState('شارژ صندوق تنخواه مطب');
+  const [topUpRef, setTopUpRef] = useState('');
+
   const filteredInvoices = state.invoices.filter((inv) =>
     statusFilter === 'all' ? true : inv.status === statusFilter
   );
+
+  const clinicPurchases = state.expenses.filter((e) => {
+    if (e.source !== 'clinic_purchase') return false;
+    if (expenseCategoryFilter !== 'all' && e.category !== expenseCategoryFilter) return false;
+    return true;
+  });
+
+  const pettyCashExpenses = state.expenses.filter((e) => e.source === 'petty_cash');
+  const pettySummary = computePettyCashSummary(state.expenses, state.pettyCashTopUps);
 
   const totalBilled = state.invoices.reduce(
     (s, inv) =>
@@ -73,9 +133,7 @@ export const BillingAccountingView: React.FC<BillingAccountingViewProps> = ({
     0
   );
   const totalCollected = state.invoices.reduce((s, inv) => s + inv.paidAmount, 0);
-  const pendingAccountingCount = state.invoices.filter(
-    (i) => i.accountingSync === 'pending'
-  ).length;
+  const netCashFlow = totalCollected - pettySummary.totalAllExpenses;
 
   const draftTotals = calculateInvoiceTotals(
     items,
@@ -99,41 +157,41 @@ export const BillingAccountingView: React.FC<BillingAccountingViewProps> = ({
 
   const handleExportAccountingCsv = () => {
     const header = [
-      'شماره فاکتور',
+      'نوع سند',
+      'شناسه/شماره',
       'تاریخ',
-      'کد بیمار',
-      'نام بیمار',
-      'پزشک',
-      'مبلغ خالص (تومان)',
-      'پرداخت شده',
+      'شرح / طرف حساب',
+      'دسته‌بندی',
+      'درآمد وصولی (تومان)',
+      'هزینه/خرید (تومان)',
       'وضعیت حسابداری',
-      'کد سند حسابداری',
     ];
-    const rows = state.invoices.map((inv) => {
-      const t = calculateInvoiceTotals(
-        inv.items,
-        inv.discount,
-        inv.insuranceCoverage,
-        inv.paidAmount
-      );
-      return [
-        inv.invoiceNumber,
-        formatPersianDate(inv.date),
-        inv.patientCode,
-        inv.patientName,
-        inv.doctorName,
-        String(t.netTotal),
-        String(inv.paidAmount),
-        inv.accountingSync === 'synced' ? 'ثبت‌شده در حسابداری' : 'در انتظار ثبت',
-        inv.accountingVoucherCode ?? '-',
-      ];
-    });
-    const csv = '\uFEFF' + [header, ...rows].map((r) => r.join(',')).join('\n');
+    const invRows = state.invoices.map((inv) => [
+      'درآمد بیمار',
+      inv.invoiceNumber,
+      formatPersianDate(inv.date),
+      inv.patientName,
+      inv.doctorName,
+      String(inv.paidAmount),
+      '0',
+      inv.accountingSync === 'synced' ? 'ثبت‌شده' : 'در انتظار',
+    ]);
+    const expRows = state.expenses.map((exp) => [
+      exp.source === 'petty_cash' ? 'هزینه تنخواه' : 'خرید مطب',
+      exp.receiptNumber || exp.id,
+      formatPersianDate(exp.date),
+      `${exp.title} - ${exp.vendor}`,
+      exp.category,
+      '0',
+      String(exp.amount),
+      exp.accountingSync === 'synced' ? 'ثبت‌شده' : 'در انتظار',
+    ]);
+    const csv = '\uFEFF' + [header, ...invRows, ...expRows].map((r) => r.join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'clinic-accounting-export.csv';
+    a.download = 'clinic-full-ledger.csv';
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -150,7 +208,7 @@ export const BillingAccountingView: React.FC<BillingAccountingViewProps> = ({
       patientCode: pat.patientCode,
       doctorId: doc.id,
       doctorName: doc.name,
-      date: '2026-11-13',
+      date: '2026-11-19',
       items,
       discount: Number(discount) || 0,
       insuranceCoverage: Number(insurance) || 0,
@@ -162,186 +220,603 @@ export const BillingAccountingView: React.FC<BillingAccountingViewProps> = ({
     setShowCreateModal(false);
   };
 
+  const openNewExpense = (source: 'clinic_purchase' | 'petty_cash') => {
+    setExpenseSourceMode(source);
+    setExpTitle('');
+    setExpVendor(source === 'petty_cash' ? 'هزینه‌های جاری مطب' : '');
+    setExpCategory(
+      source === 'petty_cash' ? 'پذیرایی و ملزومات اداری' : 'مواد مصرفی دندانپزشکی'
+    );
+    setExpAmount('');
+    setExpDate('2026-11-19');
+    setExpPaymentMethod(source === 'petty_cash' ? 'تنخواه نقدی' : 'کارت بانکی مطب');
+    setExpReceipt('');
+    setExpNotes('');
+    setExpError('');
+    setShowExpenseModal(true);
+  };
+
+  const handleCreateExpense = (e: React.FormEvent) => {
+    e.preventDefault();
+    const numericAmount = Number(expAmount);
+    if (!expTitle.trim()) {
+      setExpError('عنوان خرید یا هزینه را وارد کنید.');
+      return;
+    }
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+      setExpError('مبلغ معتبر بیشتر از صفر وارد کنید.');
+      return;
+    }
+
+    onAddExpense({
+      date: expDate,
+      title: expTitle.trim(),
+      category: expCategory,
+      vendor: expVendor.trim() || 'تامین‌کننده مطب',
+      amount: numericAmount,
+      source: expenseSourceMode,
+      paymentMethod: expenseSourceMode === 'petty_cash' ? 'تنخواه نقدی' : expPaymentMethod,
+      receiptNumber: expReceipt.trim() || undefined,
+      status: 'paid',
+      recordedBy: currentUserName,
+      accountingSync: 'pending',
+      notes: expNotes.trim() || undefined,
+    });
+    setShowExpenseModal(false);
+  };
+
+  const handleCreateTopUp = (e: React.FormEvent) => {
+    e.preventDefault();
+    const numericAmount = Number(topUpAmount);
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0) return;
+    onAddPettyCashTopUp({
+      date: topUpDate,
+      amount: numericAmount,
+      custodian: topUpCustodian.trim() || currentUserName,
+      description: topUpDesc.trim() || 'شارژ تنخواه مطب',
+      referenceCode: topUpRef.trim() || `TRN-${Math.floor(10000 + Math.random() * 89999)}`,
+    });
+    setShowTopUpModal(false);
+  };
+
+  // Unified Petty Cash Ledger (sorted newest first)
+  const pettyCashLedger = [
+    ...state.pettyCashTopUps.map((t) => ({
+      id: t.id,
+      date: t.date,
+      kind: 'topup' as const,
+      title: t.description,
+      actor: t.custodian,
+      ref: t.referenceCode || '—',
+      amount: t.amount,
+    })),
+    ...pettyCashExpenses.map((e) => ({
+      id: e.id,
+      date: e.date,
+      kind: 'expense' as const,
+      title: `${e.title} (${e.category})`,
+      actor: e.recordedBy,
+      ref: e.receiptNumber || '—',
+      amount: -e.amount,
+    })),
+  ].sort((a, b) => b.date.localeCompare(a.date));
+
   return (
     <div className="space-y-5">
-      {/* Accounting Integration Banner */}
-      <div className="bg-white border border-slate-200 rounded-xl p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        <div className="space-y-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <FileSpreadsheet className="w-5 h-5 text-teal-600" />
-            <h2 className="text-base font-bold text-slate-900">
-              حسابداری یکپارچه و صدور فاکتور آنلاین
-            </h2>
-            <span className="text-xs font-medium text-emerald-800 bg-emerald-50 border border-emerald-200 rounded px-2 py-0.5">
-              متصل به {state.accountingSoftwareName}
-            </span>
+      {/* Financial Overview Banner */}
+      <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <FileSpreadsheet className="w-5 h-5 text-teal-600" />
+              <h2 className="text-base font-bold text-slate-900">
+                مدیریت مالی، فاکتورها، خریدها و تنخواه مطب
+              </h2>
+              <span className="text-xs text-slate-500">
+                · متصل به {state.accountingSoftwareName}
+              </span>
+            </div>
+            <p className="text-xs text-slate-500">
+              صدور فاکتور بیماران، ثبت فاکتور خرید مواد و لابراتوار، مدیریت صندوق تنخواه و خروجی یکپارچه حسابداری
+            </p>
           </div>
-          <p className="text-xs text-slate-500 tabular-nums">
-            کل صورت‌حساب‌ها: {formatCurrencyToman(totalBilled)} · وصولی قطعی:{' '}
-            {formatCurrencyToman(totalCollected)} · اسناد منتظر ارسال به حسابداری:{' '}
-            {toPersianDigits(pendingAccountingCount)} فقره
-          </p>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={handleExportAccountingCsv}
+              className="min-h-10 inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors whitespace-nowrap"
+            >
+              <Download className="w-4 h-4" />
+              <span>خروجی دفتر کل حسابداری (CSV)</span>
+            </button>
+            {financeTab === 'invoices' && (
+              <button
+                type="button"
+                onClick={() => setShowCreateModal(true)}
+                className="min-h-10 inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-teal-600 rounded-lg hover:bg-teal-700 transition-colors whitespace-nowrap"
+              >
+                <Plus className="w-4 h-4" />
+                <span>صدور فاکتور جدید</span>
+              </button>
+            )}
+            {financeTab === 'purchases' && (
+              <button
+                type="button"
+                onClick={() => openNewExpense('clinic_purchase')}
+                className="min-h-10 inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-teal-600 rounded-lg hover:bg-teal-700 transition-colors whitespace-nowrap"
+              >
+                <ShoppingBag className="w-4 h-4" />
+                <span>ثبت خرید / هزینه مطب</span>
+              </button>
+            )}
+            {financeTab === 'petty_cash' && (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowTopUpModal(true)}
+                  className="min-h-10 inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-slate-900 bg-amber-100 border border-amber-200 rounded-lg hover:bg-amber-200 transition-colors whitespace-nowrap"
+                >
+                  <Coins className="w-4 h-4 text-amber-800" />
+                  <span>شارژ تنخواه</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openNewExpense('petty_cash')}
+                  className="min-h-10 inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-teal-600 rounded-lg hover:bg-teal-700 transition-colors whitespace-nowrap"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>ثبت هزینه از تنخواه</span>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={handleExportAccountingCsv}
-            className="min-h-10 inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors whitespace-nowrap"
-          >
-            <Download className="w-4 h-4" />
-            <span>خروجی اکسل حسابداری (CSV)</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowCreateModal(true)}
-            className="min-h-10 inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-teal-600 rounded-lg hover:bg-teal-700 transition-colors whitespace-nowrap"
-          >
-            <Plus className="w-4 h-4" />
-            <span>صدور فاکتور جدید</span>
-          </button>
+        {/* 4 Summary Metrics */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-3 border-t border-slate-100">
+          <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3.5">
+            <div className="text-xs text-slate-500">درآمد وصولی از بیماران</div>
+            <div className="text-base font-bold text-emerald-700 mt-1 tabular-nums">
+              {formatCurrencyToman(totalCollected)}
+            </div>
+            <div className="text-[11px] text-slate-500 mt-0.5 tabular-nums">
+              از کل {formatCurrencyToman(totalBilled)} فاکتورشده
+            </div>
+          </div>
+          <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3.5">
+            <div className="text-xs text-slate-500">خریدها و هزینه‌های مطب</div>
+            <div className="text-base font-bold text-rose-700 mt-1 tabular-nums">
+              {formatCurrencyToman(pettySummary.clinicPurchasesTotal)}
+            </div>
+            <div className="text-[11px] text-slate-500 mt-0.5 tabular-nums">
+              {toPersianDigits(
+                state.expenses.filter((e) => e.source === 'clinic_purchase').length
+              )}{' '}
+              سند خرید ثبت‌شده
+            </div>
+          </div>
+          <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3.5">
+            <div className="text-xs text-slate-500">موجودی صندوق تنخواه</div>
+            <div
+              className={`text-base font-bold mt-1 tabular-nums ${
+                pettySummary.currentBalance >= 0 ? 'text-teal-700' : 'text-red-700'
+              }`}
+            >
+              {formatCurrencyToman(pettySummary.currentBalance)}
+            </div>
+            <div className="text-[11px] text-slate-500 mt-0.5 tabular-nums">
+              هزینه‌شده از تنخواه: {formatCurrencyToman(pettySummary.totalSpent)}
+            </div>
+          </div>
+          <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3.5">
+            <div className="text-xs text-slate-500">تراز نقدی خالص (وصولی منهای هزینه‌ها)</div>
+            <div
+              className={`text-base font-bold mt-1 tabular-nums ${
+                netCashFlow >= 0 ? 'text-slate-900' : 'text-red-700'
+              }`}
+            >
+              {formatCurrencyToman(netCashFlow)}
+            </div>
+            <div className="text-[11px] text-slate-500 mt-0.5 tabular-nums">
+              مجموع کل هزینه‌ها: {formatCurrencyToman(pettySummary.totalAllExpenses)}
+            </div>
+          </div>
         </div>
-      </div>
 
-      {/* Filter Tabs */}
-      <div className="flex flex-wrap items-center gap-1 p-1 bg-slate-200/70 rounded-lg w-fit">
-        {(
-          [
-            ['all', 'همه فاکتورها'],
-            ['unpaid', 'پرداخت‌نشده'],
-            ['partial', 'پرداخت ناقص'],
-            ['paid', 'تسویه‌شده'],
-          ] as const
-        ).map(([val, label]) => (
+        {/* Main 3 Finance Tabs */}
+        <div className="grid grid-cols-3 sm:inline-flex items-center gap-1 p-1 bg-slate-100 rounded-lg w-full sm:w-auto">
           <button
-            key={val}
             type="button"
-            onClick={() => setStatusFilter(val)}
-            className={`min-h-9 px-3.5 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
-              statusFilter === val
+            onClick={() => setFinanceTab('invoices')}
+            className={`min-h-9 px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
+              financeTab === 'invoices'
                 ? 'bg-white text-slate-900 shadow-xs'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            {label}
+            فاکتورهای بیماران ({toPersianDigits(state.invoices.length)})
           </button>
-        ))}
-      </div>
-
-      {/* Invoices Table */}
-      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-right border-collapse">
-            <thead>
-              <tr className="border-b border-slate-200 bg-slate-50/80 text-xs font-semibold text-slate-600">
-                <th className="py-3 px-4">شماره و تاریخ</th>
-                <th className="py-3 px-4">بیمار</th>
-                <th className="py-3 px-4">اقلام درمانی</th>
-                <th className="py-3 px-4">مبلغ قابل پرداخت</th>
-                <th className="py-3 px-4">وضعیت پرداخت</th>
-                <th className="py-3 px-4">حسابداری</th>
-                <th className="py-3 px-4">عملیات</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 text-sm">
-              {filteredInvoices.map((inv) => {
-                const t = calculateInvoiceTotals(
-                  inv.items,
-                  inv.discount,
-                  inv.insuranceCoverage,
-                  inv.paidAmount
-                );
-                return (
-                  <tr key={inv.id} className="hover:bg-slate-50/70">
-                    <td className="py-3 px-4 whitespace-nowrap">
-                      <div className="font-mono tabular-nums font-semibold text-slate-900">
-                        {inv.invoiceNumber}
-                      </div>
-                      <div className="text-xs text-slate-500 tabular-nums">
-                        {formatPersianDate(inv.date)}
-                      </div>
-                    </td>
-                    <td className="py-3 px-4">
-                      <div className="font-semibold text-slate-900">{inv.patientName}</div>
-                      <div className="text-xs text-slate-500 font-mono">
-                        {inv.patientCode} · {inv.doctorName}
-                      </div>
-                    </td>
-                    <td className="py-3 px-4 text-xs text-slate-600 max-w-xs">
-                      {inv.items.map((it) => it.title).join('، ')}
-                    </td>
-                    <td className="py-3 px-4 whitespace-nowrap tabular-nums">
-                      <div className="font-bold text-slate-900">
-                        {formatCurrencyToman(t.netTotal)}
-                      </div>
-                      {t.remaining > 0 && (
-                        <div className="text-xs text-amber-700">
-                          مانده: {formatCurrencyToman(t.remaining)}
-                        </div>
-                      )}
-                    </td>
-                    <td className="py-3 px-4 whitespace-nowrap">
-                      {inv.status === 'paid' ? (
-                        <div className="text-xs text-emerald-700 font-medium">
-                          تسویه کامل
-                          {inv.paymentRef && (
-                            <div className="font-mono text-[11px] text-slate-500">
-                              {inv.paymentRef}
-                            </div>
-                          )}
-                        </div>
-                      ) : inv.status === 'partial' ? (
-                        <span className="text-xs text-amber-700 font-medium">پرداخت جزئی</span>
-                      ) : (
-                        <span className="text-xs text-red-700 font-medium">در انتظار پرداخت</span>
-                      )}
-                    </td>
-                    <td className="py-3 px-4 whitespace-nowrap">
-                      {inv.accountingSync === 'synced' ? (
-                        <div className="inline-flex items-center gap-1 text-xs text-emerald-700">
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          <span className="font-mono">{inv.accountingVoucherCode}</span>
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => onSyncAccounting(inv.id)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200"
-                        >
-                          <RefreshCw className="w-3.5 h-3.5" />
-                          <span>ارسال سند به حسابداری</span>
-                        </button>
-                      )}
-                    </td>
-                    <td className="py-3 px-4 whitespace-nowrap">
-                      <div className="flex items-center gap-1.5">
-                        {t.remaining > 0 && (
-                          <button
-                            type="button"
-                            onClick={() => setPayingInvoice(inv)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-white bg-teal-600 rounded-lg hover:bg-teal-700"
-                          >
-                            <CreditCard className="w-3.5 h-3.5" />
-                            <span>درگاه پرداخت</span>
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => setPrintingInvoice(inv)}
-                          aria-label={`مشاهده و چاپ فاکتور ${inv.invoiceNumber}`}
-                          className="p-2 text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-100"
-                        >
-                          <Printer className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <button
+            type="button"
+            onClick={() => setFinanceTab('purchases')}
+            className={`min-h-9 px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
+              financeTab === 'purchases'
+                ? 'bg-white text-slate-900 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            خریدها و هزینه‌ها ({toPersianDigits(
+              state.expenses.filter((e) => e.source === 'clinic_purchase').length
+            )})
+          </button>
+          <button
+            type="button"
+            onClick={() => setFinanceTab('petty_cash')}
+            className={`min-h-9 px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
+              financeTab === 'petty_cash'
+                ? 'bg-white text-slate-900 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            مدیریت تنخواه مطب
+          </button>
         </div>
       </div>
+
+      {/* TAB 1: Patient Invoices */}
+      {financeTab === 'invoices' && (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center gap-1 p-1 bg-slate-200/70 rounded-lg w-fit">
+            {(
+              [
+                ['all', 'همه فاکتورها'],
+                ['unpaid', 'پرداخت‌نشده'],
+                ['partial', 'پرداخت ناقص'],
+                ['paid', 'تسویه‌شده'],
+              ] as const
+            ).map(([val, label]) => (
+              <button
+                key={val}
+                type="button"
+                onClick={() => setStatusFilter(val)}
+                className={`min-h-9 px-3.5 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
+                  statusFilter === val
+                    ? 'bg-white text-slate-900 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-right border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50/80 text-xs font-semibold text-slate-600">
+                    <th className="py-3 px-4">شماره و تاریخ</th>
+                    <th className="py-3 px-4">بیمار</th>
+                    <th className="py-3 px-4">اقلام درمانی</th>
+                    <th className="py-3 px-4">مبلغ قابل پرداخت</th>
+                    <th className="py-3 px-4">وضعیت پرداخت</th>
+                    <th className="py-3 px-4">حسابداری</th>
+                    <th className="py-3 px-4">عملیات</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-sm">
+                  {filteredInvoices.map((inv) => {
+                    const t = calculateInvoiceTotals(
+                      inv.items,
+                      inv.discount,
+                      inv.insuranceCoverage,
+                      inv.paidAmount
+                    );
+                    return (
+                      <tr key={inv.id} className="hover:bg-slate-50/70">
+                        <td className="py-3 px-4 whitespace-nowrap">
+                          <div className="font-mono tabular-nums font-semibold text-slate-900">
+                            {inv.invoiceNumber}
+                          </div>
+                          <div className="text-xs text-slate-500 tabular-nums">
+                            {formatPersianDate(inv.date)}
+                          </div>
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="font-semibold text-slate-900">{inv.patientName}</div>
+                          <div className="text-xs text-slate-500 font-mono">
+                            {inv.patientCode} · {inv.doctorName}
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-xs text-slate-600 max-w-xs">
+                          {inv.items.map((it) => it.title).join('، ')}
+                        </td>
+                        <td className="py-3 px-4 whitespace-nowrap tabular-nums">
+                          <div className="font-bold text-slate-900">
+                            {formatCurrencyToman(t.netTotal)}
+                          </div>
+                          {t.remaining > 0 && (
+                            <div className="text-xs text-amber-700">
+                              مانده: {formatCurrencyToman(t.remaining)}
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 whitespace-nowrap">
+                          {inv.status === 'paid' ? (
+                            <div className="text-xs text-emerald-700 font-medium">
+                              تسویه کامل
+                              {inv.paymentRef && (
+                                <div className="font-mono text-[11px] text-slate-500">
+                                  {inv.paymentRef}
+                                </div>
+                              )}
+                            </div>
+                          ) : inv.status === 'partial' ? (
+                            <span className="text-xs text-amber-700 font-medium">پرداخت جزئی</span>
+                          ) : (
+                            <span className="text-xs text-red-700 font-medium">در انتظار پرداخت</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 whitespace-nowrap">
+                          {inv.accountingSync === 'synced' ? (
+                            <div className="inline-flex items-center gap-1 text-xs text-emerald-700">
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span className="font-mono">{inv.accountingVoucherCode}</span>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => onSyncAccounting(inv.id)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200"
+                            >
+                              <RefreshCw className="w-3.5 h-3.5" />
+                              <span>ارسال سند</span>
+                            </button>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 whitespace-nowrap">
+                          <div className="flex items-center gap-1.5">
+                            {t.remaining > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => setPayingInvoice(inv)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-white bg-teal-600 rounded-lg hover:bg-teal-700"
+                              >
+                                <CreditCard className="w-3.5 h-3.5" />
+                                <span>درگاه پرداخت</span>
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => setPrintingInvoice(inv)}
+                              aria-label={`مشاهده و چاپ فاکتور ${inv.invoiceNumber}`}
+                              className="p-2 text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-100"
+                            >
+                              <Printer className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 2: Clinic Purchases & Expenses */}
+      {financeTab === 'purchases' && (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <label htmlFor="expense-cat-filter" className="text-xs font-medium text-slate-600">
+                فیلتر دسته‌بندی:
+              </label>
+              <select
+                id="expense-cat-filter"
+                value={expenseCategoryFilter}
+                onChange={(e) => setExpenseCategoryFilter(e.target.value)}
+                className="min-h-9 px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg"
+              >
+                <option value="all">همه دسته‌بندی‌ها</option>
+                {EXPENSE_CATEGORIES.map((cat) => (
+                  <option key={cat} value={cat}>
+                    {cat}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="text-xs text-slate-500 tabular-nums">
+              مجموع خریدهای فیلترشده:{' '}
+              <span className="font-bold text-slate-900">
+                {formatCurrencyToman(clinicPurchases.reduce((s, e) => s + e.amount, 0))}
+              </span>
+            </div>
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-right border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50/80 text-xs font-semibold text-slate-600">
+                    <th className="py-3 px-4">تاریخ و شماره رسید</th>
+                    <th className="py-3 px-4">شرح خرید / هزینه</th>
+                    <th className="py-3 px-4">دسته‌بندی</th>
+                    <th className="py-3 px-4">فروشنده / تامین‌کننده</th>
+                    <th className="py-3 px-4">مبلغ</th>
+                    <th className="py-3 px-4">حسابداری</th>
+                    <th className="py-3 px-4">عملیات</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-sm">
+                  {clinicPurchases.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-10 text-center text-slate-500 text-sm">
+                        هنوز خریدی در این دسته‌بندی ثبت نشده است.
+                      </td>
+                    </tr>
+                  ) : (
+                    clinicPurchases.map((exp) => (
+                      <tr key={exp.id} className="hover:bg-slate-50/70">
+                        <td className="py-3 px-4 whitespace-nowrap">
+                          <div className="text-xs font-semibold text-slate-900 tabular-nums">
+                            {formatPersianDate(exp.date)}
+                          </div>
+                          <div className="text-[11px] font-mono text-slate-500">
+                            {exp.receiptNumber || 'بدون شماره'}
+                          </div>
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="font-semibold text-slate-900 text-sm">{exp.title}</div>
+                          <div className="text-xs text-slate-500">
+                            ثبت توسط {exp.recordedBy} · {exp.paymentMethod}
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-xs text-slate-700 whitespace-nowrap">
+                          {exp.category}
+                        </td>
+                        <td className="py-3 px-4 text-xs text-slate-700">{exp.vendor}</td>
+                        <td className="py-3 px-4 font-mono tabular-nums font-bold text-rose-700 whitespace-nowrap">
+                          {formatCurrencyToman(exp.amount)}
+                        </td>
+                        <td className="py-3 px-4 whitespace-nowrap">
+                          {exp.accountingSync === 'synced' ? (
+                            <span className="inline-flex items-center gap-1 text-xs text-emerald-700 font-mono">
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              {exp.accountingVoucherCode}
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => onSyncExpenseAccounting(exp.id)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200"
+                            >
+                              <RefreshCw className="w-3.5 h-3.5" />
+                              <span>ثبت سند</span>
+                            </button>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() => onDeleteExpense(exp.id)}
+                            aria-label={`حذف هزینه ${exp.title}`}
+                            className="p-1.5 text-slate-400 hover:text-red-600 rounded"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 3: Petty Cash Management */}
+      {financeTab === 'petty_cash' && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="bg-white border border-slate-200 rounded-xl p-4">
+              <div className="flex items-center justify-between text-xs text-slate-500">
+                <span>کل مبلغ شارژشده به تنخواه</span>
+                <Coins className="w-4 h-4 text-amber-600" />
+              </div>
+              <div className="text-xl font-bold text-slate-900 mt-2 tabular-nums">
+                {formatCurrencyToman(pettySummary.totalTopUps)}
+              </div>
+            </div>
+            <div className="bg-white border border-slate-200 rounded-xl p-4">
+              <div className="flex items-center justify-between text-xs text-slate-500">
+                <span>کل هزینه‌های پرداخت‌شده از تنخواه</span>
+                <ShoppingBag className="w-4 h-4 text-rose-600" />
+              </div>
+              <div className="text-xl font-bold text-rose-700 mt-2 tabular-nums">
+                {formatCurrencyToman(pettySummary.totalSpent)}
+              </div>
+            </div>
+            <div className="bg-white border border-slate-200 rounded-xl p-4">
+              <div className="flex items-center justify-between text-xs text-slate-500">
+                <span>موجودی فعلی صندوق تنخواه</span>
+                <Wallet className="w-4 h-4 text-teal-600" />
+              </div>
+              <div
+                className={`text-xl font-bold mt-2 tabular-nums ${
+                  pettySummary.currentBalance >= 0 ? 'text-teal-700' : 'text-red-700'
+                }`}
+              >
+                {formatCurrencyToman(pettySummary.currentBalance)}
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+              <h3 className="text-sm font-bold text-slate-900">
+                دفتر گردش تنخواه مطب (شارژها و هزینه‌های روزمره)
+              </h3>
+              <span className="text-xs text-slate-500 tabular-nums">
+                {toPersianDigits(pettyCashLedger.length)} تراکنش
+              </span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-right border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50/80 text-xs font-semibold text-slate-600">
+                    <th className="py-3 px-4">تاریخ</th>
+                    <th className="py-3 px-4">نوع تراکنش</th>
+                    <th className="py-3 px-4">شرح</th>
+                    <th className="py-3 px-4">مسئول / ثبت‌کننده</th>
+                    <th className="py-3 px-4">شماره رسید / مرجع</th>
+                    <th className="py-3 px-4">مبلغ</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-sm">
+                  {pettyCashLedger.map((row) => (
+                    <tr key={row.id} className="hover:bg-slate-50/70">
+                      <td className="py-3 px-4 text-xs tabular-nums whitespace-nowrap">
+                        {formatPersianDate(row.date)}
+                      </td>
+                      <td className="py-3 px-4 text-xs whitespace-nowrap">
+                        <span
+                          className={
+                            row.kind === 'topup'
+                              ? 'text-emerald-700 font-semibold'
+                              : 'text-rose-700 font-semibold'
+                          }
+                        >
+                          {row.kind === 'topup' ? 'شارژ صندوق تنخواه' : 'برداشت / هزینه تنخواه'}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-slate-800 text-xs">{row.title}</td>
+                      <td className="py-3 px-4 text-xs text-slate-600 whitespace-nowrap">
+                        {row.actor}
+                      </td>
+                      <td className="py-3 px-4 font-mono text-xs text-slate-500 whitespace-nowrap">
+                        {row.ref}
+                      </td>
+                      <td
+                        className={`py-3 px-4 font-mono tabular-nums font-bold whitespace-nowrap ${
+                          row.amount >= 0 ? 'text-emerald-700' : 'text-rose-700'
+                        }`}
+                      >
+                        {row.amount >= 0 ? '+' : ''}
+                        {formatCurrencyToman(row.amount)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Create Invoice Modal */}
       {showCreateModal && (
@@ -459,14 +934,14 @@ export const BillingAccountingView: React.FC<BillingAccountingViewProps> = ({
                             )
                           )
                         }
-                        className="w-full min-h-9 px-2 py-1.5 text-xs font-mono bg-white border border-slate-300 rounded-md"
+                        className="w-full min-h-9 px-2.5 py-1.5 text-xs font-mono bg-white border border-slate-300 rounded-md"
                       />
                     </div>
                     <div className="sm:col-span-3">
                       <input
                         type="number"
                         min={0}
-                        step={50000}
+                        step={1}
                         value={item.unitPrice}
                         onChange={(e) =>
                           setItems((prev) =>
@@ -552,6 +1027,278 @@ export const BillingAccountingView: React.FC<BillingAccountingViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowCreateModal(false)}
+                  className="min-h-10 px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200"
+                >
+                  انصراف
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* New Purchase / Petty Cash Expense Modal */}
+      {showExpenseModal && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="ثبت خرید یا هزینه مطب"
+        >
+          <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-lg overflow-hidden shadow-xl">
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+              <h3 className="text-base font-semibold text-slate-900">
+                {expenseSourceMode === 'petty_cash'
+                  ? 'ثبت هزینه جدید از محل تنخواه مطب'
+                  : 'ثبت فاکتور خرید / هزینه کلینیک'}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowExpenseModal(false)}
+                aria-label="بستن فرم هزینه"
+                className="p-1.5 text-slate-400 hover:text-slate-700"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateExpense} className="p-5 space-y-3.5">
+              {expError && (
+                <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                  {expError}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">
+                  عنوان خرید یا هزینه
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={expTitle}
+                  onChange={(e) => setExpTitle(e.target.value)}
+                  placeholder="مثال: خرید کارپول بی‌حسی و رول اتوکلاو"
+                  className="w-full min-h-10 px-3 py-2 text-sm border border-slate-300 rounded-lg"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">دسته‌بندی</label>
+                  <select
+                    value={expCategory}
+                    onChange={(e) => setExpCategory(e.target.value as ExpenseCategory)}
+                    className="w-full min-h-10 px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg"
+                  >
+                    {EXPENSE_CATEGORIES.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">
+                    مبلغ (تومان)
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min={1000}
+                    step={1}
+                    value={expAmount}
+                    onChange={(e) => setExpAmount(e.target.value)}
+                    placeholder="1500000"
+                    className="w-full min-h-10 px-3 py-2 text-sm font-mono tabular-nums border border-slate-300 rounded-lg"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">
+                    فروشنده / محل خرید
+                  </label>
+                  <input
+                    type="text"
+                    value={expVendor}
+                    onChange={(e) => setExpVendor(e.target.value)}
+                    placeholder="نام شرکت تجهیزات یا فروشگاه"
+                    className="w-full min-h-10 px-3 py-2 text-sm border border-slate-300 rounded-lg"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">تاریخ</label>
+                  <input
+                    type="date"
+                    required
+                    value={expDate}
+                    onChange={(e) => setExpDate(e.target.value)}
+                    className="w-full min-h-10 px-3 py-2 text-sm font-mono border border-slate-300 rounded-lg"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">روش پرداخت</label>
+                  {expenseSourceMode === 'petty_cash' ? (
+                    <input
+                      type="text"
+                      disabled
+                      value="تنخواه نقدی"
+                      className="w-full min-h-10 px-3 py-2 text-sm bg-slate-100 border border-slate-300 rounded-lg"
+                    />
+                  ) : (
+                    <select
+                      value={expPaymentMethod}
+                      onChange={(e) =>
+                        setExpPaymentMethod(e.target.value as ClinicExpense['paymentMethod'])
+                      }
+                      className="w-full min-h-10 px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg"
+                    >
+                      <option value="کارت بانکی مطب">کارت بانکی مطب</option>
+                      <option value="انتقال حساب">انتقال حساب</option>
+                      <option value="چک">چک</option>
+                    </select>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">
+                    شماره فاکتور / رسید
+                  </label>
+                  <input
+                    type="text"
+                    dir="ltr"
+                    value={expReceipt}
+                    onChange={(e) => setExpReceipt(e.target.value)}
+                    placeholder="PUR-405-..."
+                    className="w-full min-h-10 px-3 py-2 text-sm font-mono border border-slate-300 rounded-lg"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">توضیحات</label>
+                <input
+                  type="text"
+                  value={expNotes}
+                  onChange={(e) => setExpNotes(e.target.value)}
+                  placeholder="اختیاری..."
+                  className="w-full min-h-10 px-3 py-2 text-sm border border-slate-300 rounded-lg"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 pt-2">
+                <button
+                  type="submit"
+                  className="flex-1 min-h-10 px-4 py-2 text-sm font-medium text-white bg-teal-600 rounded-lg hover:bg-teal-700"
+                >
+                  ثبت در دفتر مالی مطب
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowExpenseModal(false)}
+                  className="min-h-10 px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200"
+                >
+                  انصراف
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Petty Cash Top-Up Modal */}
+      {showTopUpModal && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="شارژ تنخواه مطب"
+        >
+          <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-md overflow-hidden shadow-xl">
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+              <h3 className="text-base font-semibold text-slate-900">شارژ صندوق تنخواه مطب</h3>
+              <button
+                type="button"
+                onClick={() => setShowTopUpModal(false)}
+                aria-label="بستن"
+                className="p-1.5 text-slate-400 hover:text-slate-700"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <form onSubmit={handleCreateTopUp} className="p-5 space-y-3.5">
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">
+                  مبلغ شارژ (تومان)
+                </label>
+                <input
+                  type="number"
+                  required
+                  min={1000}
+                  step={1}
+                  value={topUpAmount}
+                  onChange={(e) => setTopUpAmount(e.target.value)}
+                  className="w-full min-h-10 px-3 py-2 text-sm font-mono tabular-nums border border-slate-300 rounded-lg"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">تاریخ</label>
+                  <input
+                    type="date"
+                    required
+                    value={topUpDate}
+                    onChange={(e) => setTopUpDate(e.target.value)}
+                    className="w-full min-h-10 px-3 py-2 text-sm font-mono border border-slate-300 rounded-lg"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">کد پیگیری</label>
+                  <input
+                    type="text"
+                    dir="ltr"
+                    value={topUpRef}
+                    onChange={(e) => setTopUpRef(e.target.value)}
+                    placeholder="اختیاری"
+                    className="w-full min-h-10 px-3 py-2 text-sm font-mono border border-slate-300 rounded-lg"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">
+                  تحویل‌گیرنده / مسئول تنخواه
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={topUpCustodian}
+                  onChange={(e) => setTopUpCustodian(e.target.value)}
+                  className="w-full min-h-10 px-3 py-2 text-sm border border-slate-300 rounded-lg"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">شرح شارژ</label>
+                <input
+                  type="text"
+                  value={topUpDesc}
+                  onChange={(e) => setTopUpDesc(e.target.value)}
+                  className="w-full min-h-10 px-3 py-2 text-sm border border-slate-300 rounded-lg"
+                />
+              </div>
+              <div className="flex items-center gap-2 pt-2">
+                <button
+                  type="submit"
+                  className="flex-1 min-h-10 px-4 py-2 text-sm font-medium text-white bg-teal-600 rounded-lg hover:bg-teal-700"
+                >
+                  ثبت شارژ تنخواه
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowTopUpModal(false)}
                   className="min-h-10 px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200"
                 >
                   انصراف

@@ -19,7 +19,7 @@ import type {
   StaffMember,
 } from '../types/clinic';
 import {
-  computeMonthlyAnalytics,
+  computeAccountingReport,
   formatCurrencyToman,
   formatPersianDate,
   hasPermission,
@@ -55,13 +55,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 }) => {
   const can = (perm: PermissionKey) => hasPermission(currentStaff, currentRole, perm);
 
-  const analytics = computeMonthlyAnalytics(
+  const report = computeAccountingReport(
     state.appointments,
     state.invoices,
-    state.patients
+    state.expenses,
+    'monthly'
   );
 
-  const todayDate = '2026-11-13';
+  const todayDate = '2026-11-19';
   const todayAppointments = state.appointments
     .filter((a) => a.date === todayDate && a.status !== 'cancelled')
     .sort((a, b) => a.time.localeCompare(b.time));
@@ -140,17 +141,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
         <div className="bg-white border border-slate-200 rounded-xl p-4">
           <div className="flex items-center justify-between text-xs text-slate-500">
-            <span>وصولی ثبت‌شده در حسابداری</span>
+            <span>تراز خالص نقدی (سود پس از خرید و تنخواه)</span>
             <Wallet className="w-4 h-4 text-teal-600" />
           </div>
           <div className="text-2xl font-bold text-slate-900 mt-2 tabular-nums">
             {can('manage_billing') || can('view_reports')
-              ? formatCurrencyToman(analytics.totalCollected)
+              ? formatCurrencyToman(report.netProfit)
               : 'محدودشده'}
           </div>
           <div className="text-xs text-slate-500 mt-1 tabular-nums">
             {can('manage_billing') || can('view_reports')
-              ? `نرخ وصول ${toPersianDigits(analytics.collectionRate)}٪`
+              ? `وصولی ${formatCurrencyToman(report.totalCollected)} · هزینه‌ها ${formatCurrencyToman(
+                  report.totalExpenses
+                )}`
               : 'نیازمند دسترسی مالی'}
           </div>
         </div>

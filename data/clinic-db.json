@@ -4,6 +4,422 @@
   "clinicAddress": "تهران، خیابان شریعتی، بالاتر از میرداماد، پلاک ۱۱۲، طبقه ۳",
   "accountingSoftwareName": "سپیدار سیستم / هلو",
   "smsTemplate": "{patient} عزیز، نوبت شما نزد {doctor} در تاریخ {date} ساعت {time} ثبت شده است. {clinic}",
+  "bookingConfigs": {
+    "st-doc-1": {
+      "doctorId": "st-doc-1",
+      "enableExactTimeSlots": true,
+      "slotDurationMinutes": 30,
+      "defaultDailyCapacity": 12,
+      "bookingHorizonDays": 30,
+      "weekSchedule": {
+        "0": {
+          "weekday": 0,
+          "enabled": true,
+          "dailyCapacity": 12,
+          "windows": [
+            {
+              "id": "w-morning",
+              "label": "شیفت صبح",
+              "start": "09:00",
+              "end": "12:30"
+            },
+            {
+              "id": "w-evening",
+              "label": "شیفت عصر",
+              "start": "15:00",
+              "end": "19:30"
+            }
+          ],
+          "manualAddedSlots": [],
+          "removedSlots": []
+        },
+        "1": {
+          "weekday": 1,
+          "enabled": true,
+          "dailyCapacity": 12,
+          "windows": [
+            {
+              "id": "w-morning",
+              "label": "شیفت صبح",
+              "start": "09:00",
+              "end": "12:30"
+            },
+            {
+              "id": "w-evening",
+              "label": "شیفت عصر",
+              "start": "15:00",
+              "end": "19:30"
+            }
+          ],
+          "manualAddedSlots": [],
+          "removedSlots": []
+        },
+        "2": {
+          "weekday": 2,
+          "enabled": true,
+          "dailyCapacity": 12,
+          "windows": [
+            {
+              "id": "w-morning",
+              "label": "شیفت صبح",
+              "start": "09:00",
+              "end": "12:30"
+            },
+            {
+              "id": "w-evening",
+              "label": "شیفت عصر",
+              "start": "15:00",
+              "end": "19:30"
+            }
+          ],
+          "manualAddedSlots": [],
+          "removedSlots": []
+        },
+        "3": {
+          "weekday": 3,
+          "enabled": true,
+          "dailyCapacity": 12,
+          "windows": [
+            {
+              "id": "w-morning",
+              "label": "شیفت صبح",
+              "start": "09:00",
+              "end": "12:30"
+            },
+            {
+              "id": "w-evening",
+              "label": "شیفت عصر",
+              "start": "15:00",
+              "end": "19:30"
+            }
+          ],
+          "manualAddedSlots": [],
+          "removedSlots": []
+        },
+        "4": {
+          "weekday": 4,
+          "enabled": true,
+          "dailyCapacity": 12,
+          "windows": [
+            {
+              "id": "w-morning",
+              "label": "شیفت صبح",
+              "start": "09:00",
+              "end": "12:30"
+            },
+            {
+              "id": "w-evening",
+              "label": "شیفت عصر",
+              "start": "15:00",
+              "end": "19:30"
+            }
+          ],
+          "manualAddedSlots": [],
+          "removedSlots": []
+        },
+        "5": {
+          "weekday": 5,
+          "enabled": true,
+          "dailyCapacity": 6,
+          "windows": [
+            {
+              "id": "w-morning",
+              "label": "شیفت صبح",
+              "start": "09:30",
+              "end": "13:30"
+            }
+          ],
+          "manualAddedSlots": [],
+          "removedSlots": []
+        },
+        "6": {
+          "weekday": 6,
+          "enabled": false,
+          "dailyCapacity": 0,
+          "windows": [],
+          "manualAddedSlots": [],
+          "removedSlots": []
+        }
+      },
+      "dateOverrides": []
+    },
+    "st-doc-2": {
+      "doctorId": "st-doc-2",
+      "enableExactTimeSlots": true,
+      "slotDurationMinutes": 45,
+      "defaultDailyCapacity": 8,
+      "bookingHorizonDays": 30,
+      "weekSchedule": {
+        "0": {
+          "weekday": 0,
+          "enabled": true,
+          "dailyCapacity": 8,
+          "windows": [
+            {
+              "id": "w-morning",
+              "label": "شیفت صبح",
+              "start": "09:00",
+              "end": "12:30"
+            },
+            {
+              "id": "w-evening",
+              "label": "شیفت عصر",
+              "start": "15:00",
+              "end": "19:30"
+            }
+          ],
+          "manualAddedSlots": [],
+          "removedSlots": []
+        },
+        "1": {
+          "weekday": 1,
+          "enabled": true,
+          "dailyCapacity": 8,
+          "windows": [
+            {
+              "id": "w-morning",
+              "label": "شیفت صبح",
+              "start": "09:00",
+              "end": "12:30"
+            },
+            {
+              "id": "w-evening",
+              "label": "شیفت عصر",
+              "start": "15:00",
+              "end": "19:30"
+            }
+          ],
+          "manualAddedSlots": [],
+          "removedSlots": []
+        },
+        "2": {
+          "weekday": 2,
+          "enabled": true,
+          "dailyCapacity": 8,
+          "windows": [
+            {
+              "id": "w-morning",
+              "label": "شیفت صبح",
+              "start": "09:00",
+              "end": "12:30"
+            },
+            {
+              "id": "w-evening",
+              "label": "شیفت عصر",
+              "start": "15:00",
+              "end": "19:30"
+            }
+          ],
+          "manualAddedSlots": [],
+          "removedSlots": []
+        },
+        "3": {
+          "weekday": 3,
+          "enabled": true,
+          "dailyCapacity": 8,
+          "windows": [
+            {
+              "id": "w-morning",
+              "label": "شیفت صبح",
+              "start": "09:00",
+              "end": "12:30"
+            },
+            {
+              "id": "w-evening",
+              "label": "شیفت عصر",
+              "start": "15:00",
+              "end": "19:30"
+            }
+          ],
+          "manualAddedSlots": [],
+          "removedSlots": []
+        },
+        "4": {
+          "weekday": 4,
+          "enabled": false,
+          "dailyCapacity": 12,
+          "windows": [
+            {
+              "id": "w-morning",
+              "label": "شیفت صبح",
+              "start": "09:00",
+              "end": "12:30"
+            },
+            {
+              "id": "w-evening",
+              "label": "شیفت عصر",
+              "start": "15:00",
+              "end": "19:30"
+            }
+          ],
+          "manualAddedSlots": [],
+          "removedSlots": []
+        },
+        "5": {
+          "weekday": 5,
+          "enabled": true,
+          "dailyCapacity": 6,
+          "windows": [
+            {
+              "id": "w-morning",
+              "label": "شیفت صبح",
+              "start": "09:30",
+              "end": "13:30"
+            }
+          ],
+          "manualAddedSlots": [],
+          "removedSlots": []
+        },
+        "6": {
+          "weekday": 6,
+          "enabled": false,
+          "dailyCapacity": 0,
+          "windows": [],
+          "manualAddedSlots": [],
+          "removedSlots": []
+        }
+      },
+      "dateOverrides": []
+    },
+    "st-doc-3": {
+      "doctorId": "st-doc-3",
+      "enableExactTimeSlots": true,
+      "slotDurationMinutes": 30,
+      "defaultDailyCapacity": 12,
+      "bookingHorizonDays": 30,
+      "weekSchedule": {
+        "0": {
+          "weekday": 0,
+          "enabled": true,
+          "dailyCapacity": 12,
+          "windows": [
+            {
+              "id": "w-morning",
+              "label": "شیفت صبح",
+              "start": "09:00",
+              "end": "12:30"
+            },
+            {
+              "id": "w-evening",
+              "label": "شیفت عصر",
+              "start": "15:00",
+              "end": "19:30"
+            }
+          ],
+          "manualAddedSlots": [],
+          "removedSlots": []
+        },
+        "1": {
+          "weekday": 1,
+          "enabled": true,
+          "dailyCapacity": 12,
+          "windows": [
+            {
+              "id": "w-morning",
+              "label": "شیفت صبح",
+              "start": "09:00",
+              "end": "12:30"
+            },
+            {
+              "id": "w-evening",
+              "label": "شیفت عصر",
+              "start": "15:00",
+              "end": "19:30"
+            }
+          ],
+          "manualAddedSlots": [],
+          "removedSlots": []
+        },
+        "2": {
+          "weekday": 2,
+          "enabled": true,
+          "dailyCapacity": 12,
+          "windows": [
+            {
+              "id": "w-morning",
+              "label": "شیفت صبح",
+              "start": "09:00",
+              "end": "12:30"
+            },
+            {
+              "id": "w-evening",
+              "label": "شیفت عصر",
+              "start": "15:00",
+              "end": "19:30"
+            }
+          ],
+          "manualAddedSlots": [],
+          "removedSlots": []
+        },
+        "3": {
+          "weekday": 3,
+          "enabled": true,
+          "dailyCapacity": 12,
+          "windows": [
+            {
+              "id": "w-morning",
+              "label": "شیفت صبح",
+              "start": "09:00",
+              "end": "12:30"
+            },
+            {
+              "id": "w-evening",
+              "label": "شیفت عصر",
+              "start": "15:00",
+              "end": "19:30"
+            }
+          ],
+          "manualAddedSlots": [],
+          "removedSlots": []
+        },
+        "4": {
+          "weekday": 4,
+          "enabled": true,
+          "dailyCapacity": 12,
+          "windows": [
+            {
+              "id": "w-morning",
+              "label": "شیفت صبح",
+              "start": "09:00",
+              "end": "12:30"
+            },
+            {
+              "id": "w-evening",
+              "label": "شیفت عصر",
+              "start": "15:00",
+              "end": "19:30"
+            }
+          ],
+          "manualAddedSlots": [],
+          "removedSlots": []
+        },
+        "5": {
+          "weekday": 5,
+          "enabled": false,
+          "dailyCapacity": 6,
+          "windows": [
+            {
+              "id": "w-morning",
+              "label": "شیفت صبح",
+              "start": "09:30",
+              "end": "13:30"
+            }
+          ],
+          "manualAddedSlots": [],
+          "removedSlots": []
+        },
+        "6": {
+          "weekday": 6,
+          "enabled": false,
+          "dailyCapacity": 0,
+          "windows": [],
+          "manualAddedSlots": [],
+          "removedSlots": []
+        }
+      },
+      "dateOverrides": []
+    }
+  },
   "staff": [
     {
       "id": "st-doc-1",
@@ -128,7 +544,7 @@
       ],
       "medications": "مصرف داروی خاصی ندارد",
       "medicalNotes": "حساسیت خفیف به بی‌حسی با اپی‌نفرین بالا؛ استفاده از کارپول ساده ترجیح دارد.",
-      "createdAt": "2026-08-15",
+      "createdAt": "2026-06-15",
       "teethChart": {
         "16": {
           "toothNumber": 16,
@@ -217,7 +633,7 @@
       ],
       "medications": "متفورمین ۵۰۰ میلی‌گرم روزانه",
       "medicalNotes": "قند خون ناشتا پیش از جراحی ایمپلنت بررسی شود. استفاده از دستکش بدون لاتکس.",
-      "createdAt": "2026-09-05",
+      "createdAt": "2026-07-05",
       "teethChart": {
         "14": {
           "toothNumber": 14,
@@ -402,9 +818,9 @@
       "patientPhone": "09124819203",
       "doctorId": "st-doc-1",
       "doctorName": "دکتر سارا محمدی",
-      "date": "2026-11-13",
+      "date": "2026-11-19",
       "time": "10:00",
-      "durationMinutes": 45,
+      "durationMinutes": 30,
       "service": "ترمیم کامپوزیت دندان ۳۶",
       "status": "confirmed",
       "source": "clinic",
@@ -418,9 +834,9 @@
       "patientPhone": "09123098745",
       "doctorId": "st-doc-2",
       "doctorName": "دکتر کامران فرهادی",
-      "date": "2026-11-13",
-      "time": "11:30",
-      "durationMinutes": 60,
+      "date": "2026-11-19",
+      "time": "11:00",
+      "durationMinutes": 45,
       "service": "کنترل جراحی ایمپلنت و قالب‌گیری روکش",
       "status": "arrived",
       "source": "clinic",
@@ -434,7 +850,7 @@
       "patientPhone": "09198877665",
       "doctorId": "st-doc-1",
       "doctorName": "دکتر سارا محمدی",
-      "date": "2026-11-13",
+      "date": "2026-11-19",
       "time": "16:00",
       "durationMinutes": 60,
       "service": "عصب‌کشی اورژانسی دندان ۳۶",
@@ -450,7 +866,7 @@
       "patientPhone": "09352147896",
       "doctorId": "st-doc-3",
       "doctorName": "دکتر پویا رحیمی",
-      "date": "2026-11-13",
+      "date": "2026-11-19",
       "time": "17:30",
       "durationMinutes": 30,
       "service": "تحویل ست دوم الاینر ارتودنسی",
@@ -466,7 +882,7 @@
       "patientPhone": "09131122334",
       "doctorId": "st-doc-1",
       "doctorName": "دکتر سارا محمدی",
-      "date": "2026-11-14",
+      "date": "2026-11-21",
       "time": "10:30",
       "durationMinutes": 45,
       "service": "ترمیم و بیلدآپ دندان ۱۵",
@@ -482,6 +898,22 @@
       "patientPhone": "09124819203",
       "doctorId": "st-doc-1",
       "doctorName": "دکتر سارا محمدی",
+      "date": "2026-06-15",
+      "time": "10:00",
+      "durationMinutes": 60,
+      "service": "معاینه و ترمیم اولیه",
+      "status": "completed",
+      "source": "clinic",
+      "reminderSent": true
+    },
+    {
+      "id": "apt-7",
+      "patientId": "pat-1",
+      "patientName": "نیلوفر پارسا",
+      "patientCode": "DN-1001",
+      "patientPhone": "09124819203",
+      "doctorId": "st-doc-1",
+      "doctorName": "دکتر سارا محمدی",
       "date": "2026-09-20",
       "time": "10:00",
       "durationMinutes": 60,
@@ -491,7 +923,7 @@
       "reminderSent": true
     },
     {
-      "id": "apt-7",
+      "id": "apt-8",
       "patientId": "pat-2",
       "patientName": "امیرحسین شریفی",
       "patientCode": "DN-1002",
@@ -507,7 +939,7 @@
       "reminderSent": true
     },
     {
-      "id": "apt-8",
+      "id": "apt-9",
       "patientId": "pat-3",
       "patientName": "مهسا تهرانی",
       "patientCode": "DN-1003",
@@ -524,6 +956,35 @@
     }
   ],
   "invoices": [
+    {
+      "id": "inv-0",
+      "invoiceNumber": "INV-1405-042",
+      "patientId": "pat-1",
+      "patientName": "نیلوفر پارسا",
+      "patientCode": "DN-1001",
+      "doctorId": "st-doc-1",
+      "doctorName": "دکتر سارا محمدی",
+      "date": "2026-06-15",
+      "items": [
+        {
+          "id": "it-0",
+          "title": "ترمیم کامپوزیت و روکش زیرکونیا",
+          "tooth": "46",
+          "quantity": 1,
+          "unitPrice": 9500000
+        }
+      ],
+      "discount": 500000,
+      "insuranceCoverage": 1000000,
+      "paidAmount": 8000000,
+      "status": "paid",
+      "paymentRef": "SHP-5521001",
+      "paymentMethod": "درگاه پرداخت آنلاین",
+      "paidAt": "2026-06-15",
+      "accountingSync": "synced",
+      "accountingVoucherCode": "ACC-405-0812",
+      "accountingSoftware": "سپیدار سیستم"
+    },
     {
       "id": "inv-1",
       "invoiceNumber": "INV-1405-081",
@@ -663,7 +1124,7 @@
       "patientCode": "DN-1005",
       "doctorId": "st-doc-1",
       "doctorName": "دکتر سارا محمدی",
-      "date": "2026-11-12",
+      "date": "2026-11-18",
       "items": [
         {
           "id": "it-8",
@@ -675,9 +1136,139 @@
       ],
       "discount": 0,
       "insuranceCoverage": 0,
-      "paidAmount": 0,
-      "status": "unpaid",
+      "paidAmount": 3500000,
+      "status": "paid",
+      "paymentRef": "SHP-8812031",
+      "paymentMethod": "کارتخوان مطب",
+      "paidAt": "2026-11-18",
+      "accountingSync": "synced",
+      "accountingVoucherCode": "ACC-405-1410",
+      "accountingSoftware": "سپیدار سیستم"
+    }
+  ],
+  "expenses": [
+    {
+      "id": "exp-1",
+      "date": "2026-06-18",
+      "title": "خرید کیت کامپوزیت 3M و باندینگ نسل پنجم",
+      "category": "مواد مصرفی دندانپزشکی",
+      "vendor": "تجهیزات دندانی پارس‌مد",
+      "amount": 4200000,
+      "source": "clinic_purchase",
+      "paymentMethod": "انتقال حساب",
+      "receiptNumber": "PUR-405-102",
+      "status": "paid",
+      "recordedBy": "دکتر سارا محمدی",
+      "accountingSync": "synced",
+      "accountingVoucherCode": "EXP-405-041"
+    },
+    {
+      "id": "exp-2",
+      "date": "2026-09-22",
+      "title": "سفارش روکش تمام سرامیک زیرکونیا (لابراتوار)",
+      "category": "لابراتوار و پروتز",
+      "vendor": "لابراتوار دیجیتال دنتال آریا",
+      "amount": 3100000,
+      "source": "clinic_purchase",
+      "paymentMethod": "انتقال حساب",
+      "receiptNumber": "LAB-405-218",
+      "status": "paid",
+      "recordedBy": "مریم کریمی",
+      "accountingSync": "synced",
+      "accountingVoucherCode": "EXP-405-089"
+    },
+    {
+      "id": "exp-3",
+      "date": "2026-10-19",
+      "title": "خرید فیکسچر ایمپلنت و پودر استخوان",
+      "category": "مواد مصرفی دندانپزشکی",
+      "vendor": "شرکت ایمپلنت‌گستر",
+      "amount": 7600000,
+      "source": "clinic_purchase",
+      "paymentMethod": "انتقال حساب",
+      "receiptNumber": "PUR-405-334",
+      "status": "paid",
+      "recordedBy": "دکتر سارا محمدی",
+      "accountingSync": "synced",
+      "accountingVoucherCode": "EXP-405-115"
+    },
+    {
+      "id": "exp-4",
+      "date": "2026-10-26",
+      "title": "سرویس دوره‌ای اتوکلاو و توربین‌ها",
+      "category": "تجهیزات و تعمیرات",
+      "vendor": "مهندسی پزشکی سینا",
+      "amount": 1850000,
+      "source": "clinic_purchase",
+      "paymentMethod": "کارت بانکی مطب",
+      "receiptNumber": "SRV-405-091",
+      "status": "paid",
+      "recordedBy": "مریم کریمی",
+      "accountingSync": "synced",
+      "accountingVoucherCode": "EXP-405-120"
+    },
+    {
+      "id": "exp-5",
+      "date": "2026-11-12",
+      "title": "خرید دستکش نیتریل بدون پودر و ماسک سه‌لایه",
+      "category": "مواد مصرفی دندانپزشکی",
+      "vendor": "پخش ملزومات پزشکی رازی",
+      "amount": 1250000,
+      "source": "petty_cash",
+      "paymentMethod": "تنخواه نقدی",
+      "receiptNumber": "PC-1102",
+      "status": "paid",
+      "recordedBy": "مریم کریمی",
+      "accountingSync": "synced",
+      "accountingVoucherCode": "EXP-405-138",
+      "notes": "پرداخت‌شده از صندوق تنخواه پذیرش"
+    },
+    {
+      "id": "exp-6",
+      "date": "2026-11-17",
+      "title": "پیک ارسال قالب لابراتوار و ملزومات پذیرایی مراجعین",
+      "category": "پذیرایی و ملزومات اداری",
+      "vendor": "هزینه‌های جاری مطب",
+      "amount": 480000,
+      "source": "petty_cash",
+      "paymentMethod": "تنخواه نقدی",
+      "receiptNumber": "PC-1109",
+      "status": "paid",
+      "recordedBy": "مریم کریمی",
+      "accountingSync": "pending",
+      "notes": "شامل هزینه پیک رفت‌وبرگشت و لیوان کاغذی"
+    },
+    {
+      "id": "exp-7",
+      "date": "2026-11-18",
+      "title": "شارژ ساختمان و قبوض برق و تلفن آبان",
+      "category": "اجاره و قبوض",
+      "vendor": "مدیریت مجتمع پزشکی",
+      "amount": 2400000,
+      "source": "clinic_purchase",
+      "paymentMethod": "کارت بانکی مطب",
+      "receiptNumber": "UTL-405-08",
+      "status": "paid",
+      "recordedBy": "دکتر سارا محمدی",
       "accountingSync": "pending"
+    }
+  ],
+  "pettyCashTopUps": [
+    {
+      "id": "top-1",
+      "date": "2026-10-01",
+      "amount": 5000000,
+      "custodian": "مریم کریمی (منشی)",
+      "description": "شارژ اولیه صندوق تنخواه فصل پاییز",
+      "referenceCode": "TRN-88101"
+    },
+    {
+      "id": "top-2",
+      "date": "2026-11-10",
+      "amount": 3000000,
+      "custodian": "مریم کریمی (منشی)",
+      "description": "شارژ تکمیلی تنخواه آبان‌ماه",
+      "referenceCode": "TRN-89412"
     }
   ],
   "smsLogs": [
@@ -687,8 +1278,8 @@
       "patientId": "pat-1",
       "patientName": "نیلوفر پارسا",
       "phone": "09124819203",
-      "message": "نیلوفر پارسا عزیز، نوبت شما نزد دکتر سارا محمدی در تاریخ ۲۲ آبان ۱۴۰۵ ساعت ۱۰:۰۰ ثبت شده است. کلینیک تخصصی دندانپزشکی لبخند",
-      "sentAt": "2026-11-12 18:10",
+      "message": "نیلوفر پارسا عزیز، نوبت شما نزد دکتر سارا محمدی در تاریخ ۲۸ آبان ۱۴۰۵ ساعت ۱۰:۰۰ ثبت شده است. کلینیک تخصصی دندانپزشکی لبخند",
+      "sentAt": "2026-11-18 18:10",
       "status": "delivered",
       "type": "reminder"
     },
@@ -698,8 +1289,8 @@
       "patientId": "pat-2",
       "patientName": "امیرحسین شریفی",
       "phone": "09123098745",
-      "message": "امیرحسین شریفی عزیز، نوبت شما نزد دکتر کامران فرهادی در تاریخ ۲۲ آبان ۱۴۰۵ ساعت ۱۱:۳۰ ثبت شده است. کلینیک تخصصی دندانپزشکی لبخند",
-      "sentAt": "2026-11-12 18:12",
+      "message": "امیرحسین شریفی عزیز، نوبت شما نزد دکتر کامران فرهادی در تاریخ ۲۸ آبان ۱۴۰۵ ساعت ۱۱:۰۰ ثبت شده است. کلینیک تخصصی دندانپزشکی لبخند",
+      "sentAt": "2026-11-18 18:12",
       "status": "delivered",
       "type": "reminder"
     }
@@ -713,21 +1304,21 @@
       "doctorName": "دکتر پویا رحیمی",
       "subject": "مشاوره پیش از درمان ارتودنسی نامرئی و لمینت",
       "status": "open",
-      "updatedAt": "2026-11-13 11:20",
+      "updatedAt": "2026-11-19 11:20",
       "messages": [
         {
           "id": "msg-1",
           "sender": "patient",
           "senderName": "سحر مرادی",
           "text": "سلام دکتر، برای بستن فاصله بین دو دندان جلوی فک بالا، ارتودنسی نامرئی بهتره یا کامپوزیت ونیر؟ چقدر زمان می‌بره؟",
-          "createdAt": "2026-11-13 10:45"
+          "createdAt": "2026-11-19 10:45"
         },
         {
           "id": "msg-2",
           "sender": "doctor",
           "senderName": "دکتر پویا رحیمی",
           "text": "سلام خانم مرادی. اگر فاصله زیر ۲ میلی‌متر باشد و نخواهیم روی مینای دندان تراش یا حجم اضافی بدهیم، الاینر نامرئی طی ۴ تا ۶ ماه نتیجه کاملاً طبیعی می‌دهد. برای بررسی دقیق می‌توانید یک نوبت اسکن دیجیتال رزرو کنید.",
-          "createdAt": "2026-11-13 11:20"
+          "createdAt": "2026-11-19 11:20"
         }
       ]
     },
@@ -740,21 +1331,21 @@
       "doctorName": "دکتر سارا محمدی",
       "subject": "درد شدید دندان آسیاب هنگام نوشیدنی گرم",
       "status": "converted",
-      "updatedAt": "2026-11-12 19:05",
+      "updatedAt": "2026-11-18 19:05",
       "messages": [
         {
           "id": "msg-3",
           "sender": "patient",
           "senderName": "زهرا نوری",
           "text": "دندان آسیاب پایین چپم دیشب تا صبح ضربان داشت. آیا نیاز به عصب‌کشی دارد؟",
-          "createdAt": "2026-11-12 18:40"
+          "createdAt": "2026-11-18 18:40"
         },
         {
           "id": "msg-4",
           "sender": "doctor",
           "senderName": "دکتر سارا محمدی",
           "text": "بله، درد ضربان‌دار شبانه معمولاً نشانه درگیری عصب دندان است. امروز ساعت ۱۶:۰۰ برای معاینه و درمان ریشه نوبت شما ثبت شد.",
-          "createdAt": "2026-11-12 19:05"
+          "createdAt": "2026-11-18 19:05"
         }
       ]
     }

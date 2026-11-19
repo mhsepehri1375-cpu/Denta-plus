@@ -9,6 +9,22 @@ const PORT = 3000;
 const DATA_DIR = path.resolve(process.cwd(), 'data');
 const DB_FILE = path.join(DATA_DIR, 'clinic-db.json');
 
+function hydrateState(raw: Partial<ClinicState>): ClinicState {
+  const seed = createSeedClinicState();
+  return {
+    ...seed,
+    ...raw,
+    expenses: Array.isArray(raw.expenses) ? raw.expenses : seed.expenses,
+    pettyCashTopUps: Array.isArray(raw.pettyCashTopUps)
+      ? raw.pettyCashTopUps
+      : seed.pettyCashTopUps,
+    bookingConfigs:
+      raw.bookingConfigs && Object.keys(raw.bookingConfigs).length > 0
+        ? raw.bookingConfigs
+        : seed.bookingConfigs,
+  };
+}
+
 function ensureDbFile(): ClinicState {
   if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -20,7 +36,8 @@ function ensureDbFile(): ClinicState {
   }
   try {
     const raw = fs.readFileSync(DB_FILE, 'utf-8');
-    return JSON.parse(raw) as ClinicState;
+    const parsed = JSON.parse(raw) as Partial<ClinicState>;
+    return hydrateState(parsed);
   } catch {
     const seed = createSeedClinicState();
     fs.writeFileSync(DB_FILE, JSON.stringify(seed, null, 2), 'utf-8');
